@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+h<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NMDC HSE KPI Dashboard v6.0</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/hlibs/Chart.js/3.9.1/chart.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <style>
@@ -1428,7 +1428,7 @@ function updateEditableCells() {
   });
 }
 
-document.getElementById('authModal').addEventListener('click', function(e) {
+document.getElementById('authModal')?.addEventListener('click', function(e) {
   if (e.target === this) closeAuthModal();
 });
 document.addEventListener('keydown', function(e) {
