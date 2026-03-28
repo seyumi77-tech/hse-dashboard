@@ -1860,7 +1860,7 @@ function exportTpcView(){if(!authUser){requireAuth(function(){});return;}
   let csv=TPC_COLS.join(',')+'\n';tvFiltered.forEach(d=>{csv+='"'+[d.date,d.dept,d.inspType,d.regNo,d.sub,d.type,d.loc,(d.desc||'').replace(/"/g,'""'),d.cat,d.penalty||'',d.solved?'是':'否',d.closeDate].join('","')+'"\n';});
   csvDown(csv,'tpc_ncr_'+today()+'.csv');
 }
-let nvPage=1;
+  nvPage=1;
 function initNmdcView(){if(!authUser)return;nvPage=1;renderNmdcView();}
 function renderNmdcView(){
   const start=show('nv-start').value,end=show('nv-end').value;
