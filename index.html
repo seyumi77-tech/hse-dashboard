@@ -1577,11 +1577,11 @@ function processData(data){
     show('socCnt').textContent=allData.filter(d=>d.source==='SOC').length;
     show('tpcCnt').textContent=allData.filter(d=>d.source==='TPC NCR').length;
     show('niCnt').textContent=ncrData.length;
-    initAllFilters();renderSafety();
   }
+       initAllFilters();renderSafety();
 }
 function initAllFilters(){
-  const def=d31ago(),tod=today();
+
   show('s-start').value=def;show('s-end').value=tod;
   const sSubs=new Set(),sLocs=new Set();allData.forEach(d=>{if(d.sub)sSubs.add(d.sub);if(d.loc)sLocs.add(d.loc);});
   fillSel('s-sub',Array.from(sSubs).sort(),'全部 All');fillSel('s-loc',Array.from(sLocs).sort(),'全部 All');
