@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NMDC HSE KPI Dashboard v6.0</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chhart.js/3.9.1/chart.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <style>
@@ -1224,7 +1224,7 @@ tr:hover td{background:#f8faff;}
 <a href="https://script.google.com/macros/s/AKfycbzXAUgAYbPRsochJ_0DXE9N5AHQ3_PH4AWJn4TQ6FJ-hSCPHolG1qVRJuX77rO7ZWszTA/exec" target="_blank" style="text-decoration:none">
 <div class="tool-card" style="border-left:4px solid var(--cyan)"><div class="tool-icon">⚡</div><div class="tool-body"><div class="tool-title">台電缺失改善生成器</div><div class="tool-desc">TPC 缺失改善單自動生成工具</div><div class="tool-tag" style="background:#e0f2fe;color:#0369a1">Apps Script</div></div><div class="tool-arrow">↗</div></div></a>
 <a href="https://script.google.com/macros/s/AKfycbyOA9Aa61YdFKQun0Vq3vEy8-V9CxB7lafPhuq7iexEOBjYwJSQR_XIp9HO_SfpZL-C/exec" target="_blank" style="text-decoration:none">
-<div class="tool-card" style="border-left:4px solid var(--green)"><div class="tool-icon">🌡️</div><div class="tool-body"><div class="tool-title">工區環境監測</div><div class="tool-desc">工區溫濕度與環境即時監測</div><div class="tool-tag" style="background:#d1fae5;color:#065f46">Apps Script</div></div><div class="tool-arrow">↗</div></div></a>
+<div class="tool-card" style="border-left:4px solid var(--green)"><div class="tool-icon">🌡️</div><div class="tool-body"><div class="tool-title">h</div><div class="tool-desc">工區溫濕度與環境即時監測</div><div class="tool-tag" style="background:#d1fae5;color:#065f46">Apps Script</div></div><div class="tool-arrow">↗</div></div></a>
 </div>
 </div>
 
@@ -1700,7 +1700,7 @@ function renderSafety(){if(!authUser)return;
   drawDoughnut('chart-cat',top8.map(d=>d.n).concat(others.length?['其他 ('+others.length+')']:[]),top8.map(d=>d.t).concat(others.length?[others.reduce((s,d)=>s+d.t,0)]:[]),PAL);
   const ob=show('othersBlock');if(others.length>0){ob.style.display='block';show('othersDetail').innerHTML=others.map(it=>'<span style="display:inline-block;margin-right:10px">• '+it.n+'：'+it.t+' 件</span>').join('');}else ob.style.display='none';
   drawDoughnut('chart-dtype',['不安全條件','不安全行為'],[condDef.length,actDef.length],['#f59e0b','#ef4444']);
-  drawStackedBar('chart-monthly',months,[{label:'不安全條件',data:months.map(m=>mSt[m]?mSt[m].c:0),color:'#f59e0b'},{label:'不安全行為',data:months.map(m=>mSt[m]?mSt[m].a:0),color:'#ef4444'}]);
+  drawStackedBar('chart-monthly',months,[{label:'不安全條件',data:months.map(m=>mSt[m]?mSt[m].c:0),color:'#f59e0b'},{label:'不安全行為',data:months.map(m=>mSt[m]?mSt[m].a:0),color:'#ehf4444'}]);
   updateCatTrend();updateGauges(closureRate,ptwRate,tbmRate);updateLagging();
 }
 function updateCatTrend(){if(!authUser)return;
@@ -1744,7 +1744,7 @@ function renderManpower(){if(!authUser)return;
   const byCo={};fil.forEach(d=>{if(!byCo[d.co])byCo[d.co]=0;byCo[d.co]+=d.n;});
   const coK=Object.keys(byCo).sort((a,b)=>byCo[b]-byCo[a]);
   const ccCtx=show('mp-comp-chart');if(!ccCtx)return;
-  ch['mp-comp-chart']=new Chart(ccCtx,{type:'doughnut',data:{labels:coK,datasets:[{data:coK.map(k=>byCo[k]),backgroundColor:PAL}]},options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{display:false},legend:{position:'right',labels:{boxWidth:12,font:{size:11}}}}}});
+  ch['mp-comp-chart']=new Chart(ccCtx,{type:'doughnut',data:{labels:coK,datasets:[{data:coK.map(k=>byCo[k]),backgroundColor:PAL}]},options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{display:false},legend:{position:'bottom',labels:{boxWidth:12,font:{size:11},padding:15}}}}});
   const byCom={};fil.forEach(d=>{const m=d.date.substring(0,7);if(!byCom[m])byCom[m]={};byCom[m][d.co]=(byCom[m][d.co]||0)+d.n;});
   const mos=Object.keys(byCom).sort();const allCos=[...new Set(fil.map(d=>d.co))].sort();
   const mmCtx=show('mp-monthly');if(!mmCtx)return;
@@ -2019,7 +2019,7 @@ function drawDoughnut(containerId,labels,data,colors){
   el.style.width='100%';
   const chart=echarts.init(el);ecInst[containerId]=chart;
   const palette=colors||PAL;
-  chart.setOption({backgroundColor:'transparent',tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{orient:'vertical',right:'5%',top:'center',textStyle:{fontSize:11,color:'#64748b'},icon:'circle',itemWidth:10,itemHeight:10},series:[{type:'pie',radius:['42%','68%'],center:['38%','50%'],data:labels.map((l,i)=>({name:l,value:data[i],itemStyle:{color:palette[i%palette.length]}})),label:{show:true,formatter:function(p){return p.value>0?p.value:'';},fontSize:11,fontWeight:'bold',color:'white',position:'inside'},labelLine:{show:false},emphasis:{itemStyle:{shadowBlur:10,shadowOffsetX:0,shadowColor:'rgba(0,0,0,.3)'}}}]});
+  chart.setOption({backgroundColor:'transparent',tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{orient:'horizontal',left:'center',bottom:'0',textStyle:{fontSize:11,color:'#64748b'},icon:'circle',itemWidth:10,itemHeight:10},series:[{type:'pie',radius:['42%','68%'],center:['50%','42%'],data:labels.map((l,i)=>({name:l,value:data[i],itemStyle:{color:palette[i%palette.length]}})),label:{show:true,formatter:function(p){return p.value>0?p.value:'';},fontSize:11,fontWeight:'bold',color:'white',position:'inside'},labelLine:{show:false},emphasis:{itemStyle:{shadowBlur:10,shadowOffsetX:0,shadowColor:'rgba(0,0,0,.3)'}}}]});
   window.addEventListener('resize',()=>chart.resize());
 }
 function drawStackedBar(canvasId,labels,datasets){
