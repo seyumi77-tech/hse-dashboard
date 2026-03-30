@@ -3,8 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="NMDC HSE KPI Dashboard - 通霄電廠二期更新改建計畫海底輸氣管線統包工程 安全衛生環保績效儀表板">
+<meta name="theme-color" content="#0a1628">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>NMDC HSE KPI Dashboard v6.0</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛡️%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.7/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <style>
@@ -12,6 +21,24 @@
    NMDC HSE KPI Dashboard v6.0 — Design System
    Aesthetic: Industrial Precision
    ─────────────────────────────────────────────────────────────── */
+
+/* ═══════════════════ SMOOTH ANIMATIONS ═══════════════════ */
+* { scroll-behavior: smooth; }
+.tab-pane { animation: fadeInUp 0.3s ease-out; }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card, .section-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card:hover, .section-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+.stat-value { transition: color 0.3s ease; }
+.gauge-canvas-wrap canvas { transition: opacity 0.3s ease; }
+
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap');
 
 :root{
@@ -621,9 +648,102 @@ tr:hover td{background:#f8faff;}
 .lock-feat{display:flex;align-items:center;gap:8px;padding:8px 11px;background:rgba(255,255,255,.05);border-radius:8px;font-size:11px;color:#64748b;transition:background .15s;}
 .lock-feat:hover{background:rgba(255,255,255,.09);}
 .lock-feat .lf-ic{font-size:15px;flex-shrink:0;}
+
+
+
+/* ═══════════════════ NETWORK STATUS ═══════════════════ */
+.network-status {
+  position: fixed; top: 0; left: 0; width: 100%; height: 3px;
+  background: transparent; z-index: 99998; pointer-events: none;
+}
+.network-status.loading { background: linear-gradient(90deg, transparent, #3b82f6, transparent); animation: networkSlide 1.5s ease-in-out infinite; }
+@keyframes networkSlide {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.network-status.loading { background-size: 200% 100%; }
+.offline-banner {
+  position: fixed; top: 0; left: 0; width: 100%; padding: 8px;
+  background: #ef4444; color: #fff; text-align: center; font-size: 12px;
+  z-index: 99997; transform: translateY(-100%); transition: transform 0.3s ease;
+}
+.offline-banner.show { transform: translateY(0); }
+
+/* ═══════════════════ EMPTY STATE ═══════════════════ */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 20px; color: rgba(100,116,139,0.7); text-align: center;
+}
+.empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+.empty-state-text { font-size: 14px; line-height: 1.6; }
+
+/* ═══════════════════ TOOLTIP ENHANCEMENTS ═══════════════════ */
+.stat-card { position: relative; }
+.stat-card[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute; bottom: -32px; left: 50%; transform: translateX(-50%);
+  background: rgba(15,23,42,0.9); color: #fff; padding: 4px 10px;
+  border-radius: 6px; font-size: 11px; white-space: nowrap; z-index: 100;
+  pointer-events: none;
+}
+
+/* ═══════════════════ SCROLLBAR STYLING ═══════════════════ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.5); }
+
+/* ═══════════════════ SELECTION STYLING ═══════════════════ */
+::selection { background: rgba(59,130,246,0.3); color: inherit; }
+
+/* ═══════════════════ RESPONSIVE IMPROVEMENTS ═══════════════════ */
+@media (max-width: 768px) {
+  .gauge-row { flex-direction: column; align-items: center; }
+  .gauge-item { width: 100%; max-width: 320px; }
+  .filter-bar { flex-direction: column; }
+  .filter-bar > div { width: 100%; }
+  .summary-row { flex-wrap: wrap; }
+  .summary-row > div { flex: 1 1 45%; min-width: 140px; }
+  .stat-grid { grid-template-columns: 1fr; }
+  .lagging-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .summary-row > div { flex: 1 1 100%; }
+  .lagging-grid { grid-template-columns: 1fr; }
+  .section-header { font-size: 14px; padding: 10px 16px; }
+}
+
+/* ═══════════════════ PRINT STYLES ═══════════════════ */
+@media print {
+  .sidebar, .header, #contentLock, .auth-modal,
+  .btn-refresh, .btn-export, .btn-logout, #warnBar,
+  .toast-container, .filter-bar { display: none !important; }
+  .main-content { margin-left: 0 !important; padding: 10px !important; }
+  .card, .section-card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .section-header { background: #333 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  canvas { max-width: 100% !important; height: auto !important; }
+}
 </style>
 </head>
 <body>
+
+<!-- ═══════════ LOADING SPLASH SCREEN ═══════════ -->
+<div id="splashScreen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#0a1628 0%,#162544 50%,#1a3a5c 100%);display:flex;align-items:center;justify-content:center;z-index:99999;transition:opacity 0.5s ease;">
+  <div style="text-align:center;">
+    <div style="font-size:64px;margin-bottom:20px;animation:pulse 2s infinite;">🛡️</div>
+    <h2 style="color:#fff;font-family:'Sora',sans-serif;font-size:24px;margin:0 0 8px;">NMDC HSE KPI Dashboard</h2>
+    <p style="color:rgba(255,255,255,0.6);font-size:14px;margin:0 0 30px;">通霄電廠二期更新改建計畫海底輸氣管線統包工程</p>
+    <div style="width:200px;height:4px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden;margin:0 auto;">
+      <div id="splashProgress" style="width:0%;height:100%;background:linear-gradient(90deg,#3b82f6,#60a5fa);border-radius:4px;transition:width 0.3s ease;"></div>
+    </div>
+    <p id="splashStatus" style="color:rgba(255,255,255,0.4);font-size:12px;margin-top:12px;">初始化中 Initializing...</p>
+  </div>
+</div>
+<style>
+@keyframes pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.1); } }
+#splashScreen.fade-out { opacity:0; pointer-events:none; }
+</style>
 
 
 <!-- ═══════════ CONTENT LOCK OVERLAY ═══════════ -->
@@ -1232,7 +1352,12 @@ tr:hover td{background:#f8faff;}
 </div>
 </div>
 <!-- Add Tool Modal -->
-<div id="addToolModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;">
+<div 
+<!-- ═══════════ FOOTER ═══════════ -->
+<div id="dashboardFooter" style="text-align:center;padding:20px 0;margin-top:40px;color:rgba(255,255,255,0.3);font-size:11px;border-top:1px solid rgba(255,255,255,0.05);">
+  NMDC HSE KPI Dashboard v6.0 | 通霄電廠二期更新改建計畫 | Powered by Google Apps Script
+</div>
+id="addToolModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;">
 <div style="background:white;border-radius:16px;padding:28px 24px;width:400px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.3);">
 <h3 style="margin:0 0 18px;font-size:16px;color:var(--navy-900)">+ 新增工具 Add Tool</h3>
 <div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--navy-600);display:block;margin-bottom:4px">工具名稱 Name *</label><input id="addToolName" type="text" placeholder="My Tool" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
@@ -1314,6 +1439,49 @@ if(typeof CanvasRenderingContext2D!=='undefined'&&!CanvasRenderingContext2D.prot
 //  GitHub Pages 部署模式 - GAS REST API 端點
 //  ★ 部署後請將此 URL 換成你的 GAS exec URL ★
 // ═══════════════════════════════════════════════════════════════════
+
+// ═══════════ SPLASH SCREEN CONTROL ═══════════
+function updateSplash(pct, msg) {
+  const bar = document.getElementById('splashProgress');
+  const txt = document.getElementById('splashStatus');
+  if (bar) bar.style.width = pct + '%';
+  if (txt) txt.textContent = msg;
+}
+
+// ═══════════ CHART EXPORT UTILITY ═══════════
+function exportChartToPng(canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return showToast('找不到圖表 Chart not found', 'error');
+  const link = document.createElement('a');
+  link.download = (filename || canvasId) + '_' + new Date().toISOString().slice(0,10) + '.png';
+  link.href = canvas.toDataURL('image/png', 1.0);
+  link.click();
+  showToast('圖表已匯出 Chart exported!', 'success');
+}
+
+// ═══════════ TABLE EXPORT TO CSV UTILITY ═══════════  
+function exportTableToCSV(tableElement, filename) {
+  if (!tableElement) return;
+  const rows = tableElement.querySelectorAll('tr');
+  let csv = [];
+  rows.forEach(row => {
+    const cells = row.querySelectorAll('td, th');
+    const rowData = Array.from(cells).map(c => '"' + c.textContent.trim().replace(/"/g, '""') + '"');
+    csv.push(rowData.join(','));
+  });
+  const blob = new Blob([new Uint8Array([0xEF,0xBB,0xBF]), csv.join('\n')], {type: 'text/csv;charset=utf-8'});
+  const link = document.createElement('a');
+  link.download = (filename || 'export') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  link.href = URL.createObjectURL(blob);
+  link.click();
+  showToast('CSV 已匯出 Exported!', 'success');
+}
+
+function hideSplash() {
+  const s = document.getElementById('splashScreen');
+  if (s) { s.classList.add('fade-out'); setTimeout(() => s.remove(), 600); }
+}
+
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxMtUKIat_be8QDCALm0QCRlqYbsCHAylfcDXWgPS8f1turvtLtOOnIKhjL-9GDPiqf/exec';
 
 // fetch 包裝函式：替代 google.script.run
@@ -1455,6 +1623,7 @@ document.addEventListener('keydown', function(e) {
 
 
 function unlockDashboard() {
+    updateSplash(100, '載入完成 Complete!'); setTimeout(hideSplash, 300);
   const lock = document.getElementById('contentLock');
   if (lock) lock.classList.add('hidden');
   updateEditableCells();
@@ -1522,6 +1691,7 @@ const PAL=['#1e3a8a','#ea580c','#dc2626','#16a34a','#0891b2','#7c3aed','#db2777'
 Chart.register(ChartDataLabels);
 document.addEventListener('DOMContentLoaded',loadData);
 function loadData(){
+  updateSplash(20, '正在連接 Google Sheet… Connecting...');
   show('ldStatus').textContent='正在連接 Google Sheet… Step 1/3';
   show('errorScreen').style.display='none';
   show('loadingScreen').style.display='flex';
@@ -1539,6 +1709,7 @@ function loadData(){
   }
 }
 function onLoaded(r){
+    updateSplash(60, '資料處理中 Processing data...');
   if(!r){onErr({message:'伺服器無回應'});return;}
   if(!r.success){onErr({message:r.errors?r.errors.join(' | '):'未知錯誤'});return;}
   show('ldStatus').textContent='處理資料中…';
@@ -2106,7 +2277,32 @@ function saveCustomTool(){var n=document.getElementById("addToolName").value.tri
 function renderCustomTools(){var c=document.getElementById("customToolsContainer");if(!c)return;var tools=JSON.parse(localStorage.getItem("customTools")||"[]");c.innerHTML="";tools.forEach(function(t){var a=document.createElement("a");a.href=t.url;a.target="_blank";a.style.textDecoration="none";a.innerHTML='<div class="tool-card" style="border-left:4px solid var(--blue)"><div class="tool-icon">'+t.icon+'</div><div class="tool-body"><div class="tool-title">'+t.name+'</div><div class="tool-desc">'+t.desc+'</div></div><div class="tool-arrow" style="display:flex;align-items:center;gap:4px"><span onclick="event.preventDefault();event.stopPropagation();removeCustomTool('+t.id+')" style="font-size:14px;color:#ef4444;cursor:pointer" title="刪除">✕</span>↗</div></div>';c.appendChild(a);});}
 function removeCustomTool(id){if(!confirm("確定刪除此工具？"))return;var tools=JSON.parse(localStorage.getItem("customTools")||"[]");tools=tools.filter(function(t){return t.id!==id;});localStorage.setItem("customTools",JSON.stringify(tools));renderCustomTools();}
 if(document.getElementById("customToolsContainer")){renderCustomTools();}
+
+// ═══════════ KEYBOARD SHORTCUTS ═══════════
+document.addEventListener('keydown', function(e) {
+  // Ctrl+R or F5 = Refresh data
+  if ((e.ctrlKey && e.key === 'r') || e.key === 'F5') {
+    e.preventDefault();
+    loadData();
+  }
+  // Esc = Close modals
+  if (e.key === 'Escape') {
+    closeAuthModal();
+    const addToolModal = document.getElementById('addToolModal');
+    if (addToolModal) addToolModal.style.display = 'none';
+  }
+  // Ctrl+P = Print
+  if (e.ctrlKey && e.key === 'p') {
+    e.preventDefault();
+    window.print();
+  }
+});
+
 </script>
+
+<!-- ═══════════ NETWORK STATUS INDICATOR ═══════════ -->
+<div id="networkStatus" class="network-status"></div>
+<div id="offlineBanner" class="offline-banner">⚠️ 網路連線中斷 You are offline</div>
 
 <!-- ═══════════ AUTH LOGIN MODAL ═══════════ -->
 <div id="authModal">
@@ -2143,6 +2339,52 @@ if(document.getElementById("customToolsContainer")){renderCustomTools();}
     </div>
   </div>
 </div>
+
+<!-- ═══════════ BACK TO TOP BUTTON ═══════════ -->
+<button id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="position:fixed;bottom:24px;right:24px;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;cursor:pointer;font-size:20px;box-shadow:0 4px 12px rgba(59,130,246,0.4);opacity:0;visibility:hidden;transition:all 0.3s ease;z-index:9000;display:flex;align-items:center;justify-content:center;" title="回到頂部 Back to top">↑</button>
+<script>
+(function(){
+  const btn=document.getElementById('backToTop');
+  const mc=document.querySelector('.main-content');
+  if(mc){
+    mc.addEventListener('scroll',function(){
+      if(mc.scrollTop>400){btn.style.opacity='1';btn.style.visibility='visible';}
+      else{btn.style.opacity='0';btn.style.visibility='hidden';}
+    });
+  }
+  window.addEventListener('scroll',function(){
+    if(window.scrollY>400){btn.style.opacity='1';btn.style.visibility='visible';}
+    else{btn.style.opacity='0';btn.style.visibility='hidden';}
+  });
+})();
+
+
+// ═══════════ OFFLINE DETECTION ═══════════
+window.addEventListener('online', function() {
+  document.getElementById('offlineBanner').classList.remove('show');
+  showToast('網路已連線 Back online!', 'success');
+});
+window.addEventListener('offline', function() {
+  document.getElementById('offlineBanner').classList.add('show');
+  showToast('網路已中斷 You are offline', 'error');
+});
+
+// ═══════════ AUTO REFRESH (every 5 minutes) ═══════════
+let autoRefreshTimer = null;
+function startAutoRefresh(intervalMs) {
+  stopAutoRefresh();
+  autoRefreshTimer = setInterval(function() {
+    console.log('[Auto-Refresh] Reloading data...');
+    loadData();
+  }, intervalMs || 300000); // default 5 min
+}
+function stopAutoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+}
+// Start auto-refresh after initial load
+setTimeout(function() { startAutoRefresh(300000); }, 5000);
+
+</script>
 </body>
 </html>
 
