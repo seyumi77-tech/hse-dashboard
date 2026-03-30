@@ -1623,7 +1623,6 @@ document.addEventListener('keydown', function(e) {
 
 
 function unlockDashboard() {
-    updateSplash(100, '載入完成 Complete!'); setTimeout(hideSplash, 300);
   const lock = document.getElementById('contentLock');
   if (lock) lock.classList.add('hidden');
   updateEditableCells();
@@ -1709,7 +1708,8 @@ function loadData(){
   }
 }
 function onLoaded(r){
-    updateSplash(60, '資料處理中 Processing data...');
+    updateSplash(80, '資料載入完成 Data loaded!');
+    setTimeout(function(){ updateSplash(100, '準備就緒 Ready!'); setTimeout(hideSplash, 500); }, 800);
   if(!r){onErr({message:'伺服器無回應'});return;}
   if(!r.success){onErr({message:r.errors?r.errors.join(' | '):'未知錯誤'});return;}
   show('ldStatus').textContent='處理資料中…';
@@ -1731,6 +1731,7 @@ function onLoaded(r){
   },300);
 }
 function onErr(e){show('loadingScreen').style.display='none';show('errorScreen').style.display='flex';show('errMsg').textContent='錯誤：'+(e.message||'無法取得資料');}
+    updateSplash(100, '連線失敗 Connection failed'); setTimeout(hideSplash, 1000);
 function show(id){return document.getElementById(id);}
 function switchTab(name,el){
   document.querySelectorAll('.sidebar-item').forEach(function(t){t.classList.remove('active');});
