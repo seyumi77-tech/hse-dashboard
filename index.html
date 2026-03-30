@@ -1872,7 +1872,7 @@ function saveTpcCell(el){
   if(!authUser){el.blur();requireAuth(function(){});return;}
   const sr=parseInt(el.dataset.row),col=parseInt(el.dataset.col),val=el.textContent.trim();
   if(!sr||isNaN(col))return;el.classList.add('saving');
-  google.script.run.withSuccessHandler(function(r){el.classList.remove('saving');el.classList.add(r&&r.success?'saved':'error-cell');setTimeout(()=>el.classList.remove('saved','error-cell'),2000);showToast(r&&r.success?'✅ 已更新 TPC NCR':'❌ 更新失敗',r&&r.success?'#dcfce7':'#fee2e2',r&&r.success?'#166534':'#991b1b');}).withFailureHandler(function(){el.classList.remove('saving');el.classList.add('error-cell');setTimeout(()=>el.classList.remove('error-cell'),2000);}).updateTpcNcrCell(sr,col,val);
+  gasPost('updateTpcNcrCell',{rowNum:sr,colNum:col+1,newVal:val},function(r){el.classList.remove('saving');el.classList.add(r&&r.success?'saved':'error-cell');setTimeout(()=>el.classList.remove('saved','error-cell'),2000);showToast(r&&r.success?'\u2705 \u5df2\u66f4\u65b0 TPC NCR':'\u274c \u66f4\u65b0\u5931\u6557',r&&r.success?'#dcfce7':'#fee2e2',r&&r.success?'#166534':'#991b1b');},function(){el.classList.remove('saving');el.classList.add('error-cell');setTimeout(()=>el.classList.remove('error-cell'),2000);});
 }
 function exportTpcView(){if(!authUser){requireAuth(function(){});return;}
   let csv=TPC_COLS.join(',')+'\n';tvFiltered.forEach(d=>{csv+='"'+[d.date,d.dept,d.inspType,d.regNo,d.sub,d.type,d.loc,(d.desc||'').replace(/"/g,'""'),d.cat,d.penalty||'',d.solved?'是':'否',d.closeDate].join('","')+'"\n';});
@@ -1914,7 +1914,7 @@ function saveNcrCell(el){
   if(!authUser){el.blur();requireAuth(function(){});return;}
   const sr=parseInt(el.dataset.row),col=parseInt(el.dataset.col),val=el.textContent.trim(),sheet=el.dataset.sheet;
   if(!sr||isNaN(col))return;el.classList.add('saving');
-  google.script.run.withSuccessHandler(function(r){el.classList.remove('saving');el.classList.add(r&&r.success?'saved':'error-cell');setTimeout(()=>el.classList.remove('saved','error-cell'),2000);showToast(r&&r.success?'✅ 已更新':'❌ 更新失敗',r&&r.success?'#dcfce7':'#fee2e2',r&&r.success?'#166534':'#991b1b');}).withFailureHandler(function(){el.classList.remove('saving');el.classList.add('error-cell');}).updateNcrImproveCell(sheet,sr,col,val);
+  gasPost('updateNcrImproveCell',{sheetName:sheet,rowNum:sr,colNum:col+1,newVal:val},function(r){el.classList.remove('saving');el.classList.add(r&&r.success?'saved':'error-cell');setTimeout(()=>el.classList.remove('saved','error-cell'),2000);showToast(r&&r.success?'\u2705 \u5df2\u66f4\u65b0':'\u274c \u66f4\u65b0\u5931\u6557',r&&r.success?'#dcfce7':'#fee2e2',r&&r.success?'#166534':'#991b1b');},function(){el.classList.remove('saving');el.classList.add('error-cell');});
 }
 function exportNmdcView(){if(!authUser){requireAuth(function(){});return;}
   let csv='分類,違規廠商,改善單編號,違規地點,違規敘述,缺失日期,開單日期,到期日,結案日期,狀態\n';
