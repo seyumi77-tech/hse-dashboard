@@ -17,7 +17,1319 @@ if(typeof CanvasRenderingContext2D!=='undefined'&&!CanvasRenderingContext2D.prot
 // ═══════════════════════════════════════════════════════════════════
 //  GAS REST API 端點（部署後換成你的 exec URL）
 // ═══════════════════════════════════════════════════════════════════
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwX-yLplO3I70Kaz8FLMdO9iS4rZvfu06RQrfbD7sR96cbePc_qEh-qsWdfmn-FTO-R/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxMtUKIat_be8QDCALm0QCRlqYbsCHAylfcDXWgPS8f1turvtLtOOnIKhjL-9GDPiqf/exec';
+
+// GET 請求
+function gasGet(action, onOk, onErr) {
+  fetch(GAS_URL + '?action=' + action)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) { onOk(data); })
+    .catch(function(e) { if (onErr) onErr({ message: e.message }); });
+}
+
+// POST 請求（統一入口，替代 google.script.run）
+function gasPost(action, payload, onOk, onErr) {
+  fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(Object.assign({ action: action }, payload))
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      if (data.success) { onOk(data); }
+      else { if (onErr) onErr({ message: data.error || '未知錯誤' }); }
+    })
+    .catch(function(e) { if (onErr) onErr({ message: e.message }); });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Auth System
+// ═══════════════════════════════════════════════════════════════════
+const AUTH_ACCOUNTS = [
+  { username: 'admin',  password: 'nmdc2024',   displayName: '管理員 Admin' },
+  { username: 'vic',    password: 'nmdc@hse',   displayName: 'Vic Wang (HSE)' },
+  { username: 'safety', password: 'safety2024', displayName: 'Safety Officer' }
+];
+let authUser = null;
+
+function openAuthModal() {
+  const modal = document.getElementById('authModal');
+  const logged = !!authUser;
+  document.getElementById('authUser').value = '';
+  document.getElementById('authPass').value = '';
+  const alertEl = document.getElementById('authAlert');
+  alertEl.className = 'auth-alert err';
+  alertEl.textContent = '';
+  document.getElementById('authLoginBody').style.display  = logged ? 'none' : 'block';
+  document.getElementById('authLoggedBody').style.display = logged ? 'block' : 'none';
+  document.getElementById('authFooter').style.display     = logged ? 'none' : 'flex';
+  document.getElementById('authModalTitle').textContent   = logged ? '🔑 帳號管理' : '🔐 登入管理後台';
+  if (logged) document.getElementById('authLoggedName').textContent = authUser.displayName;
+  modal.classList.add('show');
+}
+
+function closeAuthModal() {
+  document.getElementById('authModal').classList.remove('show');
+}
+
+function doAuthLogin() {
+  const u = document.getElementById('authUser').value.trim();
+  const p = document.getElementById('authPass').value;
+  const match = AUTH_ACCOUNTS.find(function(a) { return a.username === u && a.password === p; });
+  const alertEl = document.getElementById('authAlert');
+  if (!match) {
+    alertEl.className = 'auth-alert err show';
+    alertEl.textContent = '❌ 帳號或密碼錯誤，請重試';
+    document.getElementById('authPass').value = '';
+    return;
+  }
+  authUser = match;
+  updateAuthBadge();
+  closeAuthModal();
+  showToast('✅ 歡迎，' + match.displayName, '#dcfce7', '#166534');
+  unlockDashboard();
+}
+
+function doAuthLogout() {
+  authUser = null;
+  updateAuthBadge();
+  closeAuthModal();
+  showToast('已登出 Logged out', '#f1f5f9', '#475569');
+  lockDashboard();
+}
+
+function updateAuthBadge() {
+  const badge = document.getElementById('authBadge');
+  const dot   = document.getElementById('authDot');
+  const txt   = document.getElementById('authBadgeTxt');
+  if (!badge) return;
+  if (authUser) {
+    badge.className = 'auth-badge in';
+    dot.className   = 'adot on';
+    txt.textContent = '🔑 ' + authUser.displayName;
+  } else {
+    badge.className = 'auth-badge out';
+    dot.className   = 'adot off';
+    txt.textContent = '🔐 登入編輯';
+  }
+}
+
+function toggleAuthPw() {
+  const i = document.getElementById('authPass');
+  i.type = i.type === 'password' ? 'text' : 'password';
+}
+
+function requireAuth(action) {
+  if (authUser) { action(); return; }
+  showToast('🔐 請先登入才能編輯', '#fef3c7', '#92400e');
+  setTimeout(function() { openAuthModal(); }, 400);
+}
+
+function updateEditableCells() {
+  document.querySelectorAll('[contenteditable]').forEach(function(el) {
+    if (authUser) {
+      el.contentEditable = 'true';
+      el.classList.remove('edit-locked');
+      el.title = '點擊編輯';
+    } else {
+      el.contentEditable = 'false';
+      el.classList.add('edit-locked');
+      el.title = '🔐 需登入才能編輯';
+      el.onclick = function(e) { e.stopPropagation(); requireAuth(function(){}); };
+    }
+  });
+}
+
+document.getElementById('authModal')?.addEventListener('click', function(e) {
+  if (e.target === this) closeAuthModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeAuthModal();
+});
+
+function unlockDashboard() {
+  const lock = document.getElementById('contentLock');
+  if (lock) lock.classList.add('hidden');
+  // [Fix 7] 登入後更新 Header 計數
+  updateHeaderCounts();
+  updateEditableCells();
+  const active = document.querySelector('.tab-pane.active');
+  if (active) {
+    const id = active.id.replace('-pane', '');
+    const renderMap = {
+      safety:   renderSafety,
+      nmdc:     renderNmdc,
+      manpower: renderManpower,
+      mpgrid:   function() { initMpGrid(); },
+      tpcview:  function() { initTpcView(); },
+      nmdcview: function() { initNmdcView(); },
+      socview:  function() { initSocView(); },
+      ncradd:   function() { initNcrAdd(); }
+    };
+    if (renderMap[id]) renderMap[id]();
+  }
+}
+
+function lockDashboard() {
+  const lock = document.getElementById('contentLock');
+  if (lock) lock.classList.remove('hidden');
+  updateEditableCells();
+  clearDashboardContent();
+}
+
+// [Fix 7] 獨立的 Header 計數更新函式
+function updateHeaderCounts() {
+  if (!authUser) return;
+  sv('socCnt', allData.filter(function(d) { return d.source === 'SOC'; }).length);
+  sv('tpcCnt', allData.filter(function(d) { return d.source === 'TPC NCR'; }).length);
+  sv('niCnt',  ncrData.length);
+}
+
+function clearDashboardContent() {
+  ['tv-tbody','nv-tbody','sv-tbody','catTable','subTable','posTable','ni-sub-table','mp-table'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<tr><td colspan="20" style="text-align:center;color:var(--text3);padding:30px">🔐 請登入以查看資料</td></tr>';
+  });
+  ['k-soc','k-tpc','k-total','k-good','k-rate','k-penalty','tv-total','tv-open','tv-closed','tv-fined','tv-fineamt',
+   'nv-total','nv-open','nv-overdue','nv-closed','nv-rate','sv-total','sv-action','sv-cond','sv-good','sv-lsr','sv-solved',
+   'ni-total','ni-open','ni-overdue','ni-closed','ni-rate','mp-days','mp-avg','mp-max','mp-hrs','mp-total',
+   'open-cond','open-act','lsr-vio','uc-total','ua-total','uc-soc','uc-tpc','ua-soc','ua-tpc',
+   'li-trir','li-ltir','li-sev','li-nmr','li-far','li-people','li-hours',
+   'mg-days','mg-cos','mg-total','mg-avg','mg-peak',
+   'socCnt','tpcCnt','niCnt'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  Object.keys(ch).forEach(function(id) { try { ch[id].destroy(); } catch(e) {} delete ch[id]; });
+  Object.keys(ecInst).forEach(function(id) { try { ecInst[id].dispose(); } catch(e) {} delete ecInst[id]; });
+  const mgw = document.getElementById('mg-table-wrap');
+  if (mgw) mgw.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px">🔐 請登入以查看出工記錄</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  工具函式
+// ═══════════════════════════════════════════════════════════════════
+function dateStr(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function today()   { return dateStr(new Date()); }
+function d31ago()  { const d = new Date(); d.setDate(d.getDate()-6); return dateStr(d); }
+function show(id)  { return document.getElementById(id); }
+function sv(id, val) { const el = show(id); if (el) el.textContent = val; }
+
+// ═══════════════════════════════════════════════════════════════════
+//  資料載入
+// ═══════════════════════════════════════════════════════════════════
+let allData = [], mpData = [], ncrData = [], mpRaw = { dates:[], rows:[] }, mpExt = { total:{}, tbm:{}, incidents:{} };
+let socSubs = new Set();
+let ch = {}, ecInst = {};
+let allDefsTrend = [], monthsTrend = [];
+let tvFiltered = [], tvPage = 1;
+let nvFiltered = [], nvPage = 1;
+let svFiltered = [], svPage = 1;
+const PAGE = 30;
+const PAL = ['#1e3a8a','#ea580c','#dc2626','#16a34a','#0891b2','#7c3aed','#db2777','#f59e0b','#9ca3af','#0f766e','#a16207','#7e22ce'];
+Chart.register(ChartDataLabels);
+
+document.addEventListener('DOMContentLoaded', loadData);
+
+function loadData() {
+  sv('ldStatus', '正在連接資料庫… Connecting…');
+  show('errorScreen').style.display  = 'none';
+  show('loadingScreen').style.display = 'flex';
+  show('loadingScreen').classList.remove('fade-out');
+  show('dashSection').classList.remove('show');
+  const wbar = document.getElementById('warnBar');
+  if (wbar) wbar.style.display = 'none';
+  const msgs = ['正在讀取 TPC NCR 資料… Step 2/3','正在連接 Smartsheet SOC… Step 3/3','資料量較大，請稍候…','仍在連接中，Smartsheet 可能較慢…'];
+  let mi = 0;
+  const timer = setInterval(function() { if (mi < msgs.length) sv('ldStatus', msgs[mi++]); }, 4000);
+  gasGet('getAllSheetData', function(r) { clearInterval(timer); onLoaded(r); }, function(e) { clearInterval(timer); onErr(e); });
+}
+
+function onLoaded(r) {
+  if (!r) { onErr({ message: '伺服器無回應' }); return; }
+  if (!r.success) { onErr({ message: r.errors ? r.errors.join(' | ') : '未知錯誤' }); return; }
+  sv('ldStatus', '處理資料中…');
+  setTimeout(function() {
+    processData(r);
+    sv('updTime', '更新：' + (r.updatedAt || new Date().toLocaleString('zh-TW')));
+    const badge = show('socBadge');
+    const isSS = r.socSource === 'smartsheet', isErr = r.socSource === 'error';
+    badge.className = 'soc-badge ' + (isSS ? 'smartsheet' : 'googlesheet');
+    badge.innerHTML = '<span class="dot"></span>' + (isSS ? '✅ Smartsheet Live' : isErr ? '❌ SOC 載入失敗' : '⚠️ Google Sheet（備援）');
+    if (r.errors && r.errors.length > 0) {
+      const wbar = document.getElementById('warnBar');
+      if (wbar) { wbar.textContent = '⚠️ 部分資料載入失敗：' + r.errors.join('；'); wbar.style.display = 'block'; }
+    }
+    const ls = show('loadingScreen');
+    ls.classList.add('fade-out');
+    setTimeout(function() { ls.style.display = 'none'; }, 500);
+    show('dashSection').classList.add('show');
+    updateEditableCells();
+    updateAuthBadge();
+  }, 300);
+}
+
+function onErr(e) {
+  show('loadingScreen').style.display = 'none';
+  show('errorScreen').style.display   = 'flex';
+  show('errMsg').textContent = '錯誤：' + (e.message || '無法取得資料');
+}
+
+function getDefCat(t) {
+  if (!t) return null;
+  const s = t.toLowerCase();
+  if (s.includes('不安全條件') || s.includes('unsafe condition')) return 'Condition';
+  if (s.includes('不安全行為') || s.includes('unsafe action'))    return 'Action';
+  if (s.includes('優點') || s.includes('good practice'))          return 'Positive';
+  return null;
+}
+
+function processData(data) {
+  allData = []; mpData = []; ncrData = []; socSubs = new Set();
+  if (data.SOC && Array.isArray(data.SOC)) {
+    data.SOC.forEach(function(r, i) {
+      const sub = r.observed_subcontractor || '';
+      if (sub) socSubs.add(sub);
+      const dc = getDefCat(r.observation_type || '');
+      allData.push({
+        id: 'SOC-' + i, date: r.filled_date || '', type: dc === 'Positive' ? '優點' : '缺點',
+        defCat: dc, sub: sub, cat: r.hazard_type || '', loc: r.location || '',
+        desc: r.description || '', solved: r.already_solved === true, lsr: r.LSR_violated === true,
+        source: 'SOC', rowId: r.rowId || null, name: r.name || '', company: r.company || '',
+        correctMeasure: r.correct_measure || '', responsiblePerson: r.responsible_person || '',
+        improvedDate: r.improved_date || ''
+      });
+    });
+  }
+  if (data.TPC_NCR && Array.isArray(data.TPC_NCR)) {
+    data.TPC_NCR.forEach(function(r, i) {
+      let cont = r.contractor || '', matched = cont;
+      if (cont) {
+        socSubs.forEach(function(s) {
+          if ((cont.includes('兆濰')&&s.includes('兆濰'))||(cont.includes('茂富')&&s.includes('茂富'))||
+              (cont.includes('NMDC')&&s.includes('NMDC'))||(cont.includes('環海')&&s.includes('環海'))||
+              (cont.includes('Magitech')&&s.includes('Magitech'))||(cont.includes('美綺')&&s.includes('美綺')))
+            matched = s;
+        });
+      }
+      const closed = r.is_closed === '是';
+      let type = '缺點', dc = 'Condition';
+      if (r.issue_category) {
+        if (r.issue_category.includes('罰單')) type = '罰單';
+        else if (r.issue_category.includes('優點')) { type = '優點'; dc = 'Positive'; }
+        if (r.issue_category.toLowerCase().includes('action') || r.issue_category.includes('不安全行為')) dc = 'Action';
+      }
+      allData.push({
+        id: 'TPC-' + i, date: r.issue_date || '', type: type, defCat: dc, sub: matched,
+        cat: r.defect_type || '', loc: r.area || '', desc: r.content || '',
+        dept: r.dept || '', inspType: r.inspection_type || '', regNo: r.reg_no || '',
+        closeDate: r.close_date || '', solved: closed, penalty: parseFloat(r.penalty_amount) || 0,
+        source: 'TPC NCR', sheetRow: r.sheetRow || null
+      });
+    });
+  }
+  if (data.manpower && Array.isArray(data.manpower)) {
+    data.manpower.forEach(function(co) {
+      if (co.company && co.daily_manpower) {
+        co.daily_manpower.forEach(function(d) {
+          if (d.date && d.count !== null) mpData.push({ co: co.company, date: d.date, n: parseInt(d.count) || 0 });
+        });
+      }
+    });
+  }
+  if (data.NCR_IMPROVE && Array.isArray(data.NCR_IMPROVE)) ncrData = data.NCR_IMPROVE;
+  if (data.manpowerRaw) mpRaw = data.manpowerRaw;
+  if (data.manpowerExt) mpExt = data.manpowerExt;
+
+  // [Fix 7] 只有登入時才更新 Header 計數（未登入由 unlockDashboard 後呼叫）
+  updateHeaderCounts();
+  initAllFilters();
+  renderSafety();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  頁籤與 Sidebar
+// ═══════════════════════════════════════════════════════════════════
+function switchTab(name, el) {
+  document.querySelectorAll('.sidebar-item').forEach(function(t) { t.classList.remove('active'); });
+  const siEl = show('si-' + name); if (siEl) siEl.classList.add('active');
+  document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+  const pane = show(name + '-pane'); if (pane) pane.classList.add('active');
+  const TITLES = {
+    safety:'🛡️ SOC/TPC NCR 安全績效分析', nmdc:'📝 NMDC NCR 績效分析',
+    manpower:'👥 承攬商出工統計', mpgrid:'✏️ 出工記錄查詢/修改',
+    tpcview:'📋 TPC 缺失單查詢', nmdcview:'📂 NMDC 缺失單查詢',
+    socview:'👁️ NMDC SOC 查詢', ncradd:'➕ TPC 缺失單新增', tools:'🛠️ 工具箱'
+  };
+  const tb = show('pageTitleBadge'); if (tb && TITLES[name]) tb.textContent = TITLES[name];
+  if (name === 'manpower') renderManpower();
+  if (name === 'mpgrid')   initMpGrid();
+  if (name === 'nmdc')     renderNmdc();
+  if (name === 'tpcview')  initTpcView();
+  if (name === 'nmdcview') initNmdcView();
+  if (name === 'socview')  initSocView();
+  if (name === 'ncradd')   initNcrAdd();
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) { const sb = show('sidebar'); if (!sb.classList.contains('collapsed')) toggleSidebar(); }
+}
+
+function toggleSidebar() {
+  const sb = show('sidebar'), overlay = show('sidebarOverlay'), isMobile = window.innerWidth <= 768;
+  const collapsed = sb.classList.toggle('collapsed');
+  if (overlay) overlay.classList.toggle('show', !collapsed);
+  if (isMobile) document.body.style.overflow = collapsed ? '' : 'hidden';
+  show('sidebarToggle').style.transform = collapsed ? 'scaleX(-1)' : 'scaleX(1)';
+  setTimeout(function() {
+    Object.keys(ecInst).forEach(function(id) {
+      if (!ecInst[id]) return; const el = show(id); if (!el) return;
+      el.style.width = '100%'; ecInst[id].resize();
+    });
+  }, 320);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  篩選條件初始化
+// ═══════════════════════════════════════════════════════════════════
+function initAllFilters() {
+  const def = d31ago(), tod = today();
+  show('s-start').value = def; show('s-end').value = tod;
+  const sSubs = new Set(), sLocs = new Set();
+  allData.forEach(function(d) { if (d.sub) sSubs.add(d.sub); if (d.loc) sLocs.add(d.loc); });
+  fillSel('s-sub', Array.from(sSubs).sort(), '全部 All');
+  fillSel('s-loc', Array.from(sLocs).sort(), '全部 All');
+  show('ni-start').value = def; show('ni-end').value = tod;
+  const niCos = [...new Set(ncrData.map(function(d) { return d.contractor; }).filter(Boolean))].sort();
+  fillSel('ni-cont', niCos, '全部 All');
+  show('mp-start').value = def; show('mp-end').value = tod;
+  const mpCos = new Set(); mpData.forEach(function(d) { mpCos.add(d.co); });
+  fillSel('mp-comp', Array.from(mpCos).sort(), '全部 All', 'All');
+  show('mg-start').value = def; show('mg-end').value = tod;
+  if (mpRaw.rows && mpRaw.rows.length) fillSel('mg-co', mpRaw.rows.map(function(r) { return r.company; }), '全部 All');
+  show('tv-start').value = def; show('tv-end').value = tod;
+  const tpcData = allData.filter(function(d) { return d.source === 'TPC NCR'; });
+  const tvCons  = [...new Set(tpcData.map(function(d) { return d.sub; }).filter(Boolean))].sort();
+  const tvAreas = [...new Set(tpcData.map(function(d) { return d.loc; }).filter(Boolean))].sort();
+  fillSel('tv-cont', tvCons, '全部 All'); fillSel('tv-area', tvAreas, '全部 All');
+  show('nv-start').value = def; show('nv-end').value = tod;
+  const nvCons = [...new Set(ncrData.map(function(d) { return d.contractor; }).filter(Boolean))].sort();
+  const nvLocs = [...new Set(ncrData.map(function(d) { return d.location; }).filter(Boolean))].sort();
+  fillSel('nv-cont', nvCons, '全部 All'); fillSel('nv-loc', nvLocs, '全部 All');
+  show('sv-start').value = def; show('sv-end').value = tod;
+  const socOnly = allData.filter(function(d) { return d.source === 'SOC'; });
+  const svSubs  = [...new Set(socOnly.map(function(d) { return d.sub; }).filter(Boolean))].sort();
+  const svLocs  = [...new Set(socOnly.map(function(d) { return d.loc; }).filter(Boolean))].sort();
+  const svHazs  = [...new Set(socOnly.map(function(d) { return d.cat; }).filter(Boolean))].sort();
+  fillSel('sv-sub', svSubs, '全部 All'); fillSel('sv-loc', svLocs, '全部 All'); fillSel('sv-haz', svHazs, '全部 All');
+}
+
+function fillSel(id, arr, placeholder, allVal) {
+  const s = show(id); if (!s) return;
+  const cur = s.value, firstVal = allVal !== undefined ? allVal : '';
+  s.innerHTML = '<option value="' + firstVal + '">' + placeholder + '</option>' +
+    arr.map(function(v) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + v + '</option>'; }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Gauge
+// ═══════════════════════════════════════════════════════════════════
+const GAUGE_CFG = {
+  closure:{ thresholds:[80,95], colors:['#ef4444','#f59e0b','#22c55e'], target:95 },
+  ptw:    { thresholds:[80,95], colors:['#ef4444','#f59e0b','#22c55e'], target:95 },
+  tbm:    { thresholds:[90,98], colors:['#ef4444','#f59e0b','#22c55e'], target:98 }
+};
+
+function drawGauge(canvasId, value, cfgKey) {
+  const canvas = show(canvasId); if (!canvas) return;
+  const ctx = canvas.getContext('2d'), W = 260, H = 170, cx = W/2, cy = 152, r = 104;
+  canvas.width = W; canvas.height = H; ctx.clearRect(0, 0, W, H);
+  const cfg = GAUGE_CFG[cfgKey], [t1, t2] = cfg.thresholds;
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,0,false); ctx.lineWidth=20; ctx.strokeStyle='#e5e7eb'; ctx.lineCap='round'; ctx.stroke();
+  [{from:0,to:t1,col:cfg.colors[0]},{from:t1,to:t2,col:cfg.colors[1]},{from:t2,to:100,col:cfg.colors[2]}].forEach(function(seg) {
+    ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI+(seg.from/100)*Math.PI,Math.PI+(seg.to/100)*Math.PI,false);
+    ctx.lineWidth=20; ctx.strokeStyle=seg.col; ctx.lineCap='round'; ctx.stroke();
+  });
+  const tA = Math.PI+(cfg.target/100)*Math.PI;
+  ctx.beginPath(); ctx.moveTo(cx+(r-16)*Math.cos(tA),cy+(r-16)*Math.sin(tA));
+  ctx.lineTo(cx+(r+16)*Math.cos(tA),cy+(r+16)*Math.sin(tA)); ctx.lineWidth=3; ctx.strokeStyle='#111827'; ctx.lineCap='round'; ctx.stroke();
+  ctx.font='bold 11px Sora,Arial'; ctx.fillStyle='#374151'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('0',cx-r+9,cy+5); ctx.fillText('100',cx+r-9,cy+5);
+  ctx.textBaseline='middle'; ctx.fillText('50',cx,cy-r-14);
+  const cv = Math.min(100,Math.max(0,isNaN(value)?0:value)); const nA = Math.PI+(cv/100)*Math.PI;
+  let nCol = cfg.colors[0]; if (cv>=t2) nCol=cfg.colors[2]; else if (cv>=t1) nCol=cfg.colors[1];
+  ctx.save(); ctx.shadowColor='rgba(0,0,0,.2)'; ctx.shadowBlur=4; ctx.shadowOffsetX=1; ctx.shadowOffsetY=2;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+(r-8)*Math.cos(nA),cy+(r-8)*Math.sin(nA));
+  ctx.lineWidth=4; ctx.strokeStyle=nCol; ctx.lineCap='round'; ctx.stroke(); ctx.restore();
+  ctx.beginPath(); ctx.arc(cx,cy,9,0,Math.PI*2); ctx.fillStyle='#1e293b'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.fillStyle=nCol; ctx.fill();
+  const textY = cy-46;
+  ctx.fillStyle='rgba(255,255,255,.92)';
+  (function(x,y,w,h,r2){ctx.beginPath();ctx.moveTo(x+r2,y);ctx.lineTo(x+w-r2,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r2);ctx.lineTo(x+w,y+h-r2);ctx.quadraticCurveTo(x+w,y+h,x+w-r2,y+h);ctx.lineTo(x+r2,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r2);ctx.lineTo(x,y+r2);ctx.quadraticCurveTo(x,y,x+r2,y);ctx.closePath();})(cx-48,textY-18,96,36,8);
+  ctx.fill();
+  const valStr = (isNaN(value)||value===0) ? '—' : value.toFixed(1)+'%';
+  ctx.fillStyle='#111827'; ctx.font='bold 22px DM Mono,Courier New'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(valStr, cx, textY);
+}
+
+function setGaugeBadge(id, value, cfgKey) {
+  const el = show(id); if (!el) return;
+  const cfg = GAUGE_CFG[cfgKey], [t1,t2] = cfg.thresholds;
+  let txt, bg, col;
+  if (value >= t2)      { txt='✅ 優秀 Excellent'; bg='#dcfce7'; col='#166534'; }
+  else if (value >= t1) { txt='⚠️ 注意 Caution';   bg='#fef3c7'; col='#92400e'; }
+  else                  { txt='🔴 需改善 Improve';  bg='#fee2e2'; col='#991b1b'; }
+  el.textContent=txt; el.style.background=bg; el.style.color=col;
+}
+
+function updateGauges(closureRate, ptwRate, tbmRate) {
+  drawGauge('gauge-closure', closureRate, 'closure'); drawGauge('gauge-ptw', ptwRate, 'ptw'); drawGauge('gauge-tbm', tbmRate, 'tbm');
+  setGaugeBadge('gc-badge', closureRate, 'closure'); setGaugeBadge('gp-badge', ptwRate, 'ptw'); setGaugeBadge('gt-badge', tbmRate, 'tbm');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Lagging Indicators
+// ═══════════════════════════════════════════════════════════════════
+function updateLagging() {
+  if (!authUser) return;
+  const sd = show('s-start').value, ed = show('s-end').value;
+  let totalPeople = 0;
+  Object.entries(mpExt.total || {}).forEach(function([d,v]) { if (d >= sd && d <= ed) totalPeople += (parseFloat(v)||0); });
+  const totalHours = totalPeople * 8;
+  function sumInc(key) {
+    if (!mpExt.incidents || !mpExt.incidents[key]) return 0;
+    return Object.entries(mpExt.incidents[key]).filter(function([d]) { return d >= sd && d <= ed; })
+      .reduce(function(s,[,v]) { return s + (parseFloat(v)||0); }, 0);
+  }
+  const rec  = sumInc('Recordable incidents'), lti  = sumInc('LTI cases');
+  const lost = sumInc('Lost days'),            nm   = sumInc('Near Miss'), fat = sumInc('Fatalities');
+  function rate(n, mult) { return totalHours > 0 ? ((n * mult) / totalHours).toFixed(2) : '0.00'; }
+  sv('li-trir', rate(rec,200000)); sv('li-ltir', rate(lti,200000)); sv('li-sev', rate(lost,200000));
+  sv('li-nmr',  rate(nm,200000));  sv('li-far',  rate(fat,100000000));
+  sv('li-rec', rec); sv('li-lti', lti); sv('li-lost', lost); sv('li-nm', nm); sv('li-fat', fat);
+  sv('li-people', totalPeople > 0 ? totalPeople.toLocaleString() + ' 人次' : '—');
+  sv('li-hours',  totalHours  > 0 ? totalHours.toLocaleString()  + ' 小時' : '—');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Safety Tab 渲染
+// ═══════════════════════════════════════════════════════════════════
+function renderSafety() {
+  if (!authUser) return;
+  const start = show('s-start').value, end = show('s-end').value;
+  const src = show('s-source').value, sub = show('s-sub').value;
+  const loc = show('s-loc').value, defCat = show('s-defcat').value;
+  const base = allData.filter(function(item) {
+    return item.date >= start && item.date <= end &&
+      (src === 'All' || item.source === src) &&
+      (sub === '' || item.sub === sub) &&
+      (loc === '' || item.loc === loc);
+  });
+  const allDef2  = base.filter(function(d) { return d.type === '缺點' || d.type === '罰單'; });
+  const condDef  = allDef2.filter(function(d) { return d.defCat === 'Condition'; });
+  const actDef   = allDef2.filter(function(d) { return d.defCat === 'Action'; });
+  sv('uc-total', condDef.length); sv('uc-soc', condDef.filter(function(d){return d.source==='SOC';}).length); sv('uc-tpc', condDef.filter(function(d){return d.source==='TPC NCR';}).length);
+  sv('ua-total', actDef.length);  sv('ua-soc', actDef.filter(function(d){return d.source==='SOC';}).length);  sv('ua-tpc', actDef.filter(function(d){return d.source==='TPC NCR';}).length);
+  sv('open-cond', condDef.filter(function(d){return !d.solved;}).length); sv('open-act', actDef.filter(function(d){return !d.solved;}).length);
+  sv('cls-cond', condDef.filter(function(d){return d.solved;}).length); sv('opn-cond', condDef.filter(function(d){return !d.solved;}).length);
+  sv('cls-act',  actDef.filter(function(d){return d.solved;}).length);  sv('opn-act',  actDef.filter(function(d){return !d.solved;}).length);
+  let fil = base;
+  if (defCat !== 'All') fil = base.filter(function(i) { return i.type === '優點' || i.defCat === defCat; });
+  const defs   = fil.filter(function(d) { return d.type === '缺點' || d.type === '罰單'; });
+  const goods  = fil.filter(function(d) { return d.type === '優點'; });
+  const closed = defs.filter(function(d) { return d.solved; });
+  const tpcPen = fil.filter(function(d) { return d.source === 'TPC NCR' && d.type === '罰單'; });
+  let penAmt = 0; tpcPen.forEach(function(i) { penAmt += i.penalty || 0; });
+  const closureRate = defs.length > 0 ? (closed.length / defs.length) * 100 : 0;
+  const ptwVio  = allDef2.filter(function(d) { return (d.cat||'').toLowerCase().includes('工作許可')||(d.cat||'').toLowerCase().includes('ptw')||(d.desc||'').includes('工作許可'); }).length;
+  const ptwRate = allDef2.length > 0 ? Math.max(0, (1 - ptwVio/allDef2.length)*100) : 100;
+  const workDays = Object.keys(mpExt.total||{}).filter(function(d) { return d >= start && d <= end && (mpExt.total[d]||0) > 0; });
+  const tbmDays  = workDays.filter(function(d) { return (mpExt.tbm||{})[d] >= 1; });
+  const tbmRate  = workDays.length > 0 ? (tbmDays.length / workDays.length) * 100 : 0;
+  sv('k-soc', fil.filter(function(d){return d.source==='SOC'&&(d.type==='缺點'||d.type==='罰單');}).length);
+  sv('k-tpc', fil.filter(function(d){return d.source==='TPC NCR'&&(d.type==='缺點'||d.type==='罰單');}).length);
+  show('k-penalty').textContent = 'NT$' + penAmt.toLocaleString();
+  show('k-penalty-cnt').textContent = '(' + tpcPen.length + ' 筆)';
+  sv('k-total', defs.length); sv('k-good', goods.length);
+  show('k-rate').textContent = closureRate.toFixed(1) + '%';
+  sv('lsr-vio', defs.filter(function(d){return d.lsr;}).length);
+  const catStat = {};
+  defs.forEach(function(item) {
+    if (!item.cat) return;
+    if (!catStat[item.cat]) catStat[item.cat] = { t:0, c:0, a:0 };
+    catStat[item.cat].t++;
+    if (item.defCat === 'Condition') catStat[item.cat].c++;
+    else if (item.defCat === 'Action') catStat[item.cat].a++;
+  });
+  const catArr = Object.entries(catStat).map(function(e) { return { n:e[0], t:e[1].t, c:e[1].c, a:e[1].a }; }).sort(function(a,b){return b.t-a.t;});
+  const top8 = catArr.slice(0,8), others = catArr.slice(8);
+  let ch2 = '';
+  top8.forEach(function(it, i) {
+    const pct = defs.length > 0 ? ((it.t/defs.length)*100).toFixed(1) : 0;
+    ch2 += '<tr><td>'+(i+1)+'</td><td>'+it.n+'</td><td class="nc"><span class="badge bc">'+it.c+'</span></td><td class="nc"><span class="badge ba">'+it.a+'</span></td><td class="nc"><strong>'+it.t+'</strong></td><td class="nc">'+pct+'%</td></tr>';
+  });
+  if (others.length > 0) {
+    const ot=others.reduce(function(s,d){return s+d.t;},0), oc=others.reduce(function(s,d){return s+d.c;},0), oa=others.reduce(function(s,d){return s+d.a;},0);
+    const op = defs.length > 0 ? ((ot/defs.length)*100).toFixed(1) : 0;
+    ch2 += '<tr style="background:var(--card2);border-top:2px dashed var(--border)"><td style="color:var(--text3)">其他</td><td style="color:var(--text3);font-size:11px">'+others.length+' 種類合計</td><td class="nc"><span class="badge bc">'+oc+'</span></td><td class="nc"><span class="badge ba">'+oa+'</span></td><td class="nc"><strong style="color:var(--text3)">'+ot+'</strong></td><td class="nc" style="color:var(--text3)">'+op+'%</td></tr>';
+  }
+  show('catTable').innerHTML = ch2 || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">無資料</td></tr>';
+  const subSt = {};
+  fil.forEach(function(item) {
+    if (!item.sub || (item.type !== '缺點' && item.type !== '罰單')) return;
+    if (!subSt[item.sub]) subSt[item.sub] = { c:0, a:0, t:0, cl:0 };
+    subSt[item.sub].t++;
+    if (item.defCat === 'Condition') subSt[item.sub].c++;
+    else if (item.defCat === 'Action') subSt[item.sub].a++;
+    if (item.solved) subSt[item.sub].cl++;
+  });
+  let sh = '';
+  Object.values(subSt).sort(function(a,b){return b.t-a.t;}).slice(0,8).forEach(function(it) {
+    const r2 = it.t > 0 ? ((it.cl/it.t)*100).toFixed(0) : 0;
+    const name = Object.keys(subSt).find(function(k){return subSt[k]===it;});
+    sh += '<tr><td>'+name+'</td><td class="nc"><span class="badge bc">'+it.c+'</span></td><td class="nc"><span class="badge ba">'+it.a+'</span></td><td class="nc"><strong>'+it.t+'</strong></td><td class="nc"><strong>'+r2+'%</strong></td></tr>';
+  });
+  show('subTable').innerHTML = sh || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">無資料</td></tr>';
+  const posSt = {};
+  fil.forEach(function(item) {
+    if (!item.sub || item.type !== '優點') return;
+    if (!posSt[item.sub]) posSt[item.sub] = { soc:0, tpc:0, t:0 };
+    if (item.source === 'SOC') posSt[item.sub].soc++;
+    else if (item.source === 'TPC NCR') posSt[item.sub].tpc++;
+    posSt[item.sub].t++;
+  });
+  let ph = '';
+  Object.entries(posSt).sort(function(a,b){return b[1].t-a[1].t;}).forEach(function([n,v], i) {
+    const m = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+    ph += '<tr><td class="nc"><strong>'+m+'</strong></td><td>'+n+'</td><td class="nc">'+(v.soc>0?'<span style="color:#059669;font-weight:700">'+v.soc+'</span>':'0')+'</td><td class="nc">'+(v.tpc>0?'<span style="color:#0891b2;font-weight:700">'+v.tpc+'</span>':'0')+'</td><td class="nc"><strong style="color:#059669">'+v.t+'</strong></td></tr>';
+  });
+  show('posTable').innerHTML = ph || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">無資料</td></tr>';
+  const mSt = {};
+  base.forEach(function(item) {
+    if (!item.date || (item.type !== '缺點' && item.type !== '罰單')) return;
+    const m = item.date.substring(0,7);
+    if (!mSt[m]) mSt[m] = { c:0, a:0 };
+    if (item.defCat === 'Condition') mSt[m].c++;
+    else if (item.defCat === 'Action') mSt[m].a++;
+  });
+  const months = Object.keys(mSt).sort();
+  allDefsTrend = defs;
+  monthsTrend  = months.length > 0 ? months : (function() { const ms={}; defs.forEach(function(d){if(d.date)ms[d.date.substring(0,7)]=1;}); return Object.keys(ms).sort(); })();
+  drawDoughnut('chart-cat',
+    top8.map(function(d){return d.n;}).concat(others.length?['其他 ('+others.length+')']:[]),
+    top8.map(function(d){return d.t;}).concat(others.length?[others.reduce(function(s,d){return s+d.t;},0)]:[]),
+    PAL
+  );
+  const ob = show('othersBlock');
+  if (others.length > 0) {
+    ob.style.display = 'block';
+    show('othersDetail').innerHTML = others.map(function(it){return '<span style="display:inline-block;margin-right:10px">• '+it.n+'：'+it.t+' 件</span>';}).join('');
+  } else ob.style.display = 'none';
+  drawDoughnut('chart-dtype', ['不安全條件','不安全行為'], [condDef.length, actDef.length], ['#f59e0b','#ef4444']);
+  drawStackedBar('chart-monthly', months, [
+    { label:'不安全條件', data:months.map(function(m){return mSt[m]?mSt[m].c:0;}), color:'#f59e0b' },
+    { label:'不安全行為', data:months.map(function(m){return mSt[m]?mSt[m].a:0;}), color:'#ef4444' }
+  ]);
+  updateCatTrend();
+  updateGauges(closureRate, ptwRate, tbmRate);
+  updateLagging();
+}
+
+function updateCatTrend() {
+  if (!authUser) return;
+  const mode = (show('catTrendSel')||{}).value || 'top5';
+  const catM = {};
+  allDefsTrend.forEach(function(item) {
+    if (!item.date || !item.cat) return;
+    const m = item.date.substring(0,7);
+    if (!catM[item.cat]) catM[item.cat] = {};
+    catM[item.cat][m] = (catM[item.cat][m] || 0) + 1;
+  });
+  const sorted = Object.entries(catM).map(function([n,md]) { return { n, t:Object.values(md).reduce(function(s,v){return s+v;},0), md }; }).sort(function(a,b){return b.t-a.t;});
+  const disp = mode === 'top5' ? sorted.slice(0,5) : mode === 'top8' ? sorted.slice(0,8) : sorted;
+  const months = monthsTrend;
+  const datasets = disp.map(function(c, i) {
+    return { label:c.n, data:months.map(function(m){return c.md[m]||0;}), borderColor:PAL[i%PAL.length], backgroundColor:PAL[i%PAL.length]+'22', borderWidth:2.5, pointRadius:4, tension:.3, fill:false };
+  });
+  drawLine('chart-cattend', months, datasets);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  NMDC Tab 渲染
+// ═══════════════════════════════════════════════════════════════════
+function renderNmdc() {
+  if (!authUser) return;
+  if (!show('ni-start').value) { show('ni-start').value = d31ago(); show('ni-end').value = today(); }
+  const start = show('ni-start').value, end = show('ni-end').value;
+  const cat = show('ni-cat').value, cont = show('ni-cont').value, stat = show('ni-stat').value;
+  const fil = ncrData.filter(function(d) {
+    const dateKey = d.issue_date || d.defect_date || '';
+    if (start && dateKey && dateKey < start) return false;
+    if (end   && dateKey && dateKey > end)   return false;
+    if (cat  && d.sheet !== cat)     return false;
+    if (cont && d.contractor !== cont) return false;
+    if (stat && d.status !== stat)   return false;
+    return true;
+  });
+  const total = fil.length, open = fil.filter(function(d){return d.status==='open';}).length;
+  const overdue = fil.filter(function(d){return d.status==='overdue';}).length;
+  const closed  = fil.filter(function(d){return d.status==='closed';}).length;
+  sv('ni-total',total); sv('ni-open',open); sv('ni-overdue',overdue); sv('ni-closed',closed);
+  show('ni-rate').textContent = total > 0 ? ((closed/total)*100).toFixed(1)+'%' : '0%';
+  drawDoughnut('ni-chart-cat',    ['Safety（安全）','ENV（環保）'], [fil.filter(function(d){return d.sheet==='Safety';}).length, fil.filter(function(d){return d.sheet==='ENV';}).length], ['#1e3a8a','#0f766e']);
+  drawDoughnut('ni-chart-status', ['未結案','逾期','已結案'], [open,overdue,closed], ['#ef4444','#f59e0b','#16a34a']);
+  const coSt = {};
+  fil.forEach(function(d) { if (!coSt[d.contractor]) coSt[d.contractor]=0; coSt[d.contractor]++; });
+  const coArr = Object.entries(coSt).sort(function(a,b){return b[1]-a[1];});
+  drawHBar('ni-chart-cont', coArr.map(function(e){return e[0];}), coArr.map(function(e){return e[1];}), '缺失件數', PAL);
+  const mSt = {};
+  fil.forEach(function(d) {
+    if (!d.issue_date) return;
+    const m = d.issue_date.substring(0,7);
+    if (!mSt[m]) mSt[m] = { s:0, e:0 };
+    if (d.sheet === 'Safety') mSt[m].s++; else if (d.sheet === 'ENV') mSt[m].e++;
+  });
+  const ms = Object.keys(mSt).sort();
+  drawStackedBar('ni-chart-monthly', ms, [
+    { label:'Safety', data:ms.map(function(m){return mSt[m]?mSt[m].s:0;}), color:'#1e3a8a' },
+    { label:'ENV',    data:ms.map(function(m){return mSt[m]?mSt[m].e:0;}), color:'#0f766e' }
+  ]);
+  const cSum = {};
+  fil.forEach(function(d) {
+    const k = d.contractor || '—';
+    if (!cSum[k]) cSum[k] = { s:0, e:0, t:0, open:0, overdue:0, closed:0 };
+    if (d.sheet === 'Safety') cSum[k].s++; else cSum[k].e++;
+    cSum[k].t++; cSum[k][d.status]++;
+  });
+  let th = '';
+  Object.entries(cSum).sort(function(a,b){return b[1].t-a[1].t;}).forEach(function([n,v]) {
+    const r2 = v.t > 0 ? ((v.closed/v.t)*100).toFixed(0) : 0;
+    th += '<tr><td><strong>'+n+'</strong></td><td class="nc">'+v.s+'</td><td class="nc">'+v.e+'</td><td class="nc"><strong>'+v.t+'</strong></td><td class="nc"><span style="color:var(--red);font-weight:700">'+v.open+'</span></td><td class="nc"><span style="color:var(--amber);font-weight:700">'+v.overdue+'</span></td><td class="nc"><span style="color:var(--green);font-weight:700">'+v.closed+'</span></td><td class="nc"><strong>'+r2+'%</strong></td></tr>';
+  });
+  show('ni-sub-table').innerHTML = th || '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px">無資料</td></tr>';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Manpower Tab 渲染
+// ═══════════════════════════════════════════════════════════════════
+function renderManpower() {
+  if (!authUser) return;
+  if (!mpData.length) { sv('mp-days','—'); return; }
+  const start = show('mp-start').value, end = show('mp-end').value, co = show('mp-comp').value;
+  const fil = mpData.filter(function(d) { return d.date>=start && d.date<=end && (co==='All'||d.co===co); });
+  const byDate = {};
+  fil.forEach(function(d) { byDate[d.date] = (byDate[d.date]||0) + d.n; });
+  const dates = Object.keys(byDate).sort(), vals = dates.map(function(d){return byDate[d];});
+  const total = vals.reduce(function(s,v){return s+v;},0), avg = dates.length ? Math.round(total/dates.length) : 0;
+  const maxV = vals.length ? Math.max.apply(null,vals) : 0, maxD = dates[vals.indexOf(maxV)] || '-';
+  sv('mp-days',dates.length); sv('mp-avg',avg); sv('mp-max',maxV);
+  sv('mp-max-date',maxD); sv('mp-hrs',(total*8).toLocaleString()); sv('mp-total',total.toLocaleString());
+  destroyChart('mp-trend'); destroyChart('mp-comp-chart'); destroyChart('mp-monthly');
+  const mpCtx = show('mp-trend'); if (!mpCtx) return;
+  ch['mp-trend'] = new Chart(mpCtx, { type:'line', data:{labels:dates,datasets:[{label:'日人力',data:vals,borderColor:'#0891b2',backgroundColor:'rgba(8,145,178,.1)',tension:.3,fill:true,pointRadius:2}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{maxTicksLimit:12}},y:{beginAtZero:true}}} });
+  const byCo = {};
+  fil.forEach(function(d) { if (!byCo[d.co]) byCo[d.co]=0; byCo[d.co]+=d.n; });
+  const coK = Object.keys(byCo).sort(function(a,b){return byCo[b]-byCo[a];});
+  const ccCtx = show('mp-comp-chart'); if (!ccCtx) return;
+  ch['mp-comp-chart'] = new Chart(ccCtx, { type:'doughnut', data:{labels:coK,datasets:[{data:coK.map(function(k){return byCo[k];}),backgroundColor:PAL}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{display:false},legend:{position:'bottom',labels:{boxWidth:12,font:{size:11},padding:15}}}} });
+  const byCom = {};
+  fil.forEach(function(d) { const m=d.date.substring(0,7); if(!byCom[m])byCom[m]={}; byCom[m][d.co]=(byCom[m][d.co]||0)+d.n; });
+  const mos = Object.keys(byCom).sort(), allCos = [...new Set(fil.map(function(d){return d.co;}))].sort();
+  const mmCtx = show('mp-monthly'); if (!mmCtx) return;
+  ch['mp-monthly'] = new Chart(mmCtx, { type:'bar', data:{labels:mos,datasets:allCos.map(function(c,i){return {label:c,data:mos.map(function(m){return byCom[m]&&byCom[m][c]?byCom[m][c]:0;}),backgroundColor:PAL[i%PAL.length]};})}, options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{display:false},legend:{labels:{boxWidth:12,font:{size:11}}}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}} });
+  const byCoDet = {};
+  fil.forEach(function(d) { if(!byCoDet[d.co])byCoDet[d.co]={days:new Set(),sum:0,max:0}; byCoDet[d.co].days.add(d.date); byCoDet[d.co].sum+=d.n; if(d.n>byCoDet[d.co].max)byCoDet[d.co].max=d.n; });
+  let tr = '';
+  Object.entries(byCoDet).sort(function(a,b){return b[1].sum-a[1].sum;}).forEach(function([n,v]) {
+    const pct = total ? ((v.sum/total)*100).toFixed(1) : 0;
+    tr += '<tr><td><strong>'+n+'</strong></td><td class="nc">'+v.days.size+'</td><td class="nc">'+Math.round(v.sum/v.days.size)+'</td><td class="nc">'+v.max+'</td><td class="nc">'+((v.sum*8).toLocaleString())+'</td><td class="nc">'+pct+'%</td></tr>';
+  });
+  show('mp-table').innerHTML = tr || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">無資料</td></tr>';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Manpower Grid Tab
+// ═══════════════════════════════════════════════════════════════════
+let mgPage = 1; const MG_PER_PAGE = 30;
+function initMpGrid()  { if (!authUser) return; if (mpRaw.dates && mpRaw.dates.length) renderMpGrid(); }
+function renderMpGrid() {
+  if (!mpRaw.dates || !mpRaw.dates.length) { show('mg-table-wrap').innerHTML='<div style="text-align:center;color:var(--text3);padding:40px">出工資料尚未載入</div>'; return; }
+  const start = show('mg-start').value, end = show('mg-end').value;
+  const coFil = (show('mg-co')||{}).value || '';
+  const mode  = (show('mg-mode')||{}).value || 'grid';
+  const perP  = parseInt((show('mg-perpage')||{}).value || 30);
+  const allDates = mpRaw.dates.filter(function(d) { return (!start||d>=start)&&(!end||d<=end); }).sort();
+  const rows     = coFil ? mpRaw.rows.filter(function(r){return r.company===coFil;}) : mpRaw.rows;
+  const totalPages = Math.ceil(allDates.length/perP)||1;
+  if (mgPage > totalPages) mgPage = 1;
+  const pageDates = allDates.slice((mgPage-1)*perP, mgPage*perP);
+  let total=0, peakV=0, peakD='';
+  pageDates.forEach(function(d) { let dT=0; rows.forEach(function(r){dT+=(r.daily&&r.daily[d])||0;}); total+=dT; if(dT>peakV){peakV=dT;peakD=d;} });
+  sv('mg-days',allDates.length); sv('mg-cos',rows.length); sv('mg-total',total);
+  sv('mg-avg',pageDates.length?Math.round(total/pageDates.length):0); sv('mg-peak',peakV);
+  const pdEl = show('mg-peak-date'); if (pdEl) pdEl.textContent = peakD || '-';
+  const infoEl = show('mg-info'); if (infoEl) infoEl.textContent = '共 '+allDates.length+' 天 | 第 '+mgPage+'/'+totalPages+' 頁';
+  if (mode === 'grid') renderMpGridMode(rows, pageDates);
+  else renderMpListMode(rows, pageDates);
+  renderPager('mg-pager', mgPage, totalPages, function(p) { mgPage=p; renderMpGrid(); });
+}
+
+function renderMpGridMode(rows, dates) {
+  let h = '<table style="min-width:'+(Math.max(600,dates.length*72+160))+'px"><thead><tr><th style="min-width:120px;position:sticky;left:0;z-index:2;background:#f8fafc">承攬商</th>';
+  dates.forEach(function(d) { const day=new Date(d); const wd=['日','一','二','三','四','五','六'][day.getDay()]; const isSat=day.getDay()===6,isSun=day.getDay()===0; h+='<th style="text-align:center;min-width:64px;'+(isSun?'color:#ef4444':isSat?'color:#0891b2':'')+'">'+(d.substring(5))+' <span style="font-size:9px;font-weight:400">('+wd+')</span></th>'; });
+  h += '<th style="text-align:center;min-width:56px;position:sticky;right:0;z-index:2;background:#f8fafc">小計</th></tr></thead><tbody>';
+  const colTotals = {}; dates.forEach(function(d){colTotals[d]=0;});
+  rows.forEach(function(r) {
+    let rowT = 0;
+    h += '<tr><td style="font-weight:600;position:sticky;left:0;background:white;z-index:1;border-right:2px solid var(--border)">'+r.company+'</td>';
+    dates.forEach(function(d) {
+      const v = (r.daily && r.daily[d]) || 0; colTotals[d] += v; rowT += v;
+      const isEdit = !!(r.sheetRow && d);
+      h += '<td style="text-align:center;padding:0">'+(isEdit ? '<span class="editable" data-row="'+r.sheetRow+'" data-col="date:'+d+'" contenteditable="true" onblur="saveMpCell(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="display:block;width:100%;text-align:center;padding:7px 4px;min-height:32px;outline:none;cursor:text;font-family:\'DM Mono\',monospace">'+(v||'')+'</span>' : '<span style="display:block;width:100%;text-align:center;padding:7px 4px;color:var(--text3)">'+(v||'—')+'</span>')+'</td>';
+    });
+    h += '<td style="text-align:center;font-weight:700;font-family:\'DM Mono\',monospace;position:sticky;right:0;background:#f8fafc;border-left:2px solid var(--border)">'+rowT+'</td></tr>';
+  });
+  h += '<tr style="background:linear-gradient(90deg,var(--navy-900),var(--navy-700));color:white"><td style="font-weight:700;position:sticky;left:0;background:var(--navy-800);z-index:1;border-right:2px solid rgba(255,255,255,.2)">TOTAL</td>';
+  let gt = 0;
+  dates.forEach(function(d) { gt+=colTotals[d]; h+='<td style="text-align:center;font-weight:700;font-family:\'DM Mono\',monospace">'+colTotals[d]+'</td>'; });
+  h += '<td style="text-align:center;font-weight:700;font-family:\'DM Mono\',monospace;position:sticky;right:0;background:var(--navy-800)">'+gt+'</td></tr></tbody></table>';
+  show('mg-table-wrap').innerHTML = h;
+}
+
+function renderMpListMode(rows, dates) {
+  let h = '<table><thead><tr><th>日期</th><th>承攬商</th><th class="nc" style="width:80px">人數</th></tr></thead><tbody>';
+  const items = [];
+  dates.forEach(function(d) { rows.forEach(function(r) { const v=(r.daily&&r.daily[d])||0; if(v>0)items.push({d,co:r.company,v,sr:r.sheetRow}); }); });
+  items.sort(function(a,b){return a.d.localeCompare(b.d)||a.co.localeCompare(b.co);});
+  items.forEach(function(it) { h+='<tr><td>'+it.d+'</td><td><strong>'+it.co+'</strong></td><td class="nc"><span contenteditable="true" class="editable" data-row="'+it.sr+'" data-col="date:'+it.d+'" onblur="saveMpCell(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-family:\'DM Mono\',monospace;padding:4px 8px;border-radius:4px">'+it.v+'</span></td></tr>'; });
+  if (!items.length) h += '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px">此期間無出工記錄</td></tr>';
+  h += '</tbody></table>';
+  show('mg-table-wrap').innerHTML = h;
+}
+
+function exportMpGrid() {
+  if (!authUser) { requireAuth(function(){}); return; }
+  const start = show('mg-start').value, end = show('mg-end').value;
+  const dates = mpRaw.dates.filter(function(d){return(!start||d>=start)&&(!end||d<=end);}).sort();
+  const rows = mpRaw.rows || [];
+  let csv = '承攬商,' + dates.join(',') + ',小計\n';
+  rows.forEach(function(r) { let t=0; const cells=dates.map(function(d){const v=(r.daily&&r.daily[d])||0;t+=v;return v;}); csv+=r.company+','+cells.join(',')+','+t+'\n'; });
+  const colT = dates.map(function(d){return rows.reduce(function(s,r){return s+((r.daily&&r.daily[d])||0);},0);});
+  csv += 'TOTAL,' + colT.join(',') + ',' + colT.reduce(function(s,v){return s+v;},0) + '\n';
+  csvDown(csv, 'manpower_'+start+'_'+end+'.csv');
+}
+
+// [Fix 3] saveMpCell 改用 gasPost
+function saveMpCell(el) {
+  if (!authUser) { el.blur(); requireAuth(function(){}); return; }
+  const v = parseInt(el.textContent) || 0;
+  el.textContent = v || '';
+  const sr = parseInt(el.dataset.row), colStr = el.dataset.col;
+  if (!sr || !colStr) return;
+  el.classList.add('saving');
+  if (colStr.startsWith('date:')) {
+    const d  = colStr.substring(5);
+    const co = el.closest('tr').querySelector('td:first-child').textContent.trim();
+    const row = mpRaw.rows.find(function(r){return r.company===co;});
+    if (row) { if (!row.daily) row.daily={}; row.daily[d] = v; }
+    // [Fix 3] 使用 gasPost 替代 google.script.run
+    gasPost('upsertManpowerDay',
+      { dateStr: d, entries: [{ company: co, count: v }], onlyChanged: true },
+      function(r) {
+        el.classList.remove('saving');
+        el.classList.add('saved');
+        setTimeout(function(){el.classList.remove('saved');}, 2000);
+        showToast('✅ 已更新出工記錄', '#dcfce7', '#166534');
+      },
+      function(e) {
+        el.classList.remove('saving');
+        el.classList.add('error-cell');
+        setTimeout(function(){el.classList.remove('error-cell');}, 2000);
+        showToast('❌ 更新失敗：' + e.message, '#fee2e2', '#991b1b');
+      }
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  TPC NCR View
+// ═══════════════════════════════════════════════════════════════════
+const TPC_COLS = ['開單日期','主辦組','巡檢類型','管登編號','承攬商','開立總類','區域','缺失內容','缺失種類','罰款','是否結案','結案日期'];
+function initTpcView() { if (!authUser) return; tvPage = 1; renderTpcView(); }
+
+function renderTpcView() {
+  const start = show('tv-start').value, end = show('tv-end').value;
+  const cont = show('tv-cont').value, area = show('tv-area').value, stat = show('tv-stat').value;
+  const kw = (show('tv-search').value || '').toLowerCase();
+  const base = allData.filter(function(d){return d.source==='TPC NCR';});
+  tvFiltered = base.filter(function(d) {
+    if (start && d.date < start) return false; if (end && d.date > end) return false;
+    if (cont && d.sub !== cont) return false; if (area && d.loc !== area) return false;
+    if (stat && (stat==='否' ? d.solved : !d.solved)) return false;
+    if (kw && !(d.desc||'').toLowerCase().includes(kw) && !(d.sub||'').toLowerCase().includes(kw) && !(d.cat||'').toLowerCase().includes(kw)) return false;
+    return true;
+  });
+  const total=tvFiltered.length, open=tvFiltered.filter(function(d){return !d.solved;}).length, closed=tvFiltered.filter(function(d){return d.solved;}).length;
+  const fined=tvFiltered.filter(function(d){return d.penalty>0;}); let fineAmt=0; fined.forEach(function(d){fineAmt+=d.penalty;});
+  sv('tv-total',total); sv('tv-open',open); sv('tv-closed',closed); sv('tv-fined',fined.length);
+  show('tv-fineamt').textContent = 'NT$' + fineAmt.toLocaleString();
+  const countEl = show('tv-count'); if (countEl) countEl.textContent = '共 '+total+' 筆';
+  const totalPages = Math.ceil(total/PAGE)||1; if (tvPage>totalPages) tvPage=1;
+  renderTvPage();
+  renderPager('tv-pager', tvPage, totalPages, function(p){tvPage=p;renderTvPage();});
+}
+
+function renderTvPage() {
+  const page = tvFiltered.slice((tvPage-1)*PAGE, tvPage*PAGE);
+  let h = '';
+  page.forEach(function(d, i) {
+    const idx = (tvPage-1)*PAGE+i+1;
+    const statusBadge = d.solved ? '<span class="sb-closed">✓ 已結案</span>' : '<span class="sb-open">● 未結案</span>';
+    const penBadge    = d.penalty > 0 ? '<span class="sb-fine">NT$'+d.penalty.toLocaleString()+'</span>' : '—';
+    const sr = d.sheetRow;
+    function editTd(content, col, wide) {
+      return '<td style="'+(wide?'':'max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')+'">'+(sr?'<span class="editable" data-row="'+sr+'" data-col="'+col+'" contenteditable="true" onblur="saveTpcCell(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="outline:none;'+(wide?'':'max-width:80px;display:inline-block')+'">'+content+'</span>':content)+'</td>';
+    }
+    h += '<tr><td style="color:var(--text3);text-align:center">'+idx+'</td>'+editTd(d.date,1)+
+      '<td>'+d.dept+'</td><td>'+d.inspType+'</td><td>'+d.regNo+'</td>'+
+      '<td><strong style="color:var(--navy-600)">'+d.sub+'</strong></td>'+
+      '<td>'+typeBadge(d.type)+'</td><td>'+d.loc+'</td>'+editTd(d.desc,8,true)+
+      '<td>'+editTd(d.cat,9)+'</td><td>'+penBadge+'</td><td>'+statusBadge+'</td>'+editTd(d.closeDate,11)+'</tr>';
+  });
+  show('tv-tbody').innerHTML = h || '<tr><td colspan="13" style="text-align:center;color:var(--text3);padding:40px">無符合條件的資料</td></tr>';
+}
+
+// [Fix 1] saveTpcCell：newVal → value
+function saveTpcCell(el) {
+  if (!authUser) { el.blur(); requireAuth(function(){}); return; }
+  const sr  = parseInt(el.dataset.row);
+  const col = parseInt(el.dataset.col);
+  const val = el.textContent.trim();
+  if (!sr || isNaN(col)) return;
+  el.classList.add('saving');
+  gasPost('updateTpcNcrCell',
+    { rowNum: sr, colNum: col + 1, value: val },   // ← [Fix 1] newVal → value
+    function(r) {
+      el.classList.remove('saving'); el.classList.add('saved');
+      setTimeout(function(){el.classList.remove('saved');}, 2000);
+      showToast('✅ 已更新 TPC NCR', '#dcfce7', '#166534');
+    },
+    function(e) {
+      el.classList.remove('saving'); el.classList.add('error-cell');
+      setTimeout(function(){el.classList.remove('error-cell');}, 2000);
+      showToast('❌ 更新失敗：' + e.message, '#fee2e2', '#991b1b');
+    }
+  );
+}
+
+function exportTpcView() {
+  if (!authUser) { requireAuth(function(){}); return; }
+  let csv = TPC_COLS.join(',') + '\n';
+  tvFiltered.forEach(function(d) { csv+='"'+[d.date,d.dept,d.inspType,d.regNo,d.sub,d.type,d.loc,(d.desc||'').replace(/"/g,'""'),d.cat,d.penalty||'',d.solved?'是':'否',d.closeDate].join('","')+'"\n'; });
+  csvDown(csv, 'tpc_ncr_'+today()+'.csv');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  NMDC NCR View
+// ═══════════════════════════════════════════════════════════════════
+function initNmdcView() { if (!authUser) return; nvPage = 1; renderNmdcView(); }
+
+function renderNmdcView() {
+  const start = show('nv-start').value, end = show('nv-end').value;
+  const cat = show('nv-cat').value, cont = show('nv-cont').value, loc = show('nv-loc').value;
+  const stat = show('nv-stat').value, kw = (show('nv-search').value||'').toLowerCase();
+  nvFiltered = ncrData.filter(function(d) {
+    const dk = d.issue_date || d.defect_date || '';
+    if (start && dk && dk < start) return false; if (end && dk && dk > end) return false;
+    if (cat  && d.sheet !== cat)     return false; if (cont && d.contractor !== cont) return false;
+    if (loc  && d.location !== loc)  return false; if (stat && d.status !== stat) return false;
+    if (kw && !(d.contractor||'').toLowerCase().includes(kw) && !(d.description||'').toLowerCase().includes(kw) && !(d.ncr_number||'').toLowerCase().includes(kw)) return false;
+    return true;
+  });
+  const total=nvFiltered.length, open=nvFiltered.filter(function(d){return d.status==='open';}).length;
+  const overdue=nvFiltered.filter(function(d){return d.status==='overdue';}).length, closed=nvFiltered.filter(function(d){return d.status==='closed';}).length;
+  sv('nv-total',total); sv('nv-open',open); sv('nv-overdue',overdue); sv('nv-closed',closed);
+  show('nv-rate').textContent = total > 0 ? ((closed/total)*100).toFixed(1)+'%' : '0%';
+  const countEl = show('nv-count'); if (countEl) countEl.textContent = '共 '+total+' 筆';
+  const totalPages = Math.ceil(total/PAGE)||1; if (nvPage>totalPages) nvPage=1;
+  renderNvPage();
+  renderPager('nv-pager', nvPage, totalPages, function(p){nvPage=p;renderNvPage();});
+}
+
+function renderNvPage() {
+  const page = nvFiltered.slice((nvPage-1)*PAGE, nvPage*PAGE);
+  let h = '';
+  page.forEach(function(d, i) {
+    const idx = (nvPage-1)*PAGE+i+1;
+    const statusBadge = d.status==='closed'?'<span class="sb-closed">✓ 已結案</span>':d.status==='overdue'?'<span class="sb-overdue">⚠ 逾期</span>':'<span class="sb-open">● 未結案</span>';
+    const catBadge = '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:'+(d.sheet==='Safety'?'#dbeafe;color:#1e40af':'#ccfbf1;color:#0f766e')+'">'+(d.sheet||'—')+'</span>';
+    const sr = d.ncrImproveSheetRow, nm = d.ncr_number || '';
+    h += '<tr><td style="text-align:center;color:var(--text3)">'+idx+'</td><td>'+catBadge+'</td>'+
+      '<td><strong style="color:var(--navy-600)">'+d.contractor+'</strong></td>'+
+      '<td style="font-family:\'DM Mono\',monospace;font-size:11px">'+(sr?'<span class="editable" data-row="'+sr+'" data-col="0" data-sheet="'+d.sheet+'" contenteditable="true" onblur="saveNcrCell(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="outline:none">'+nm+'</span>':nm)+'</td>'+
+      '<td>'+d.location+'</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+d.description+'">'+d.description+'</td>'+
+      '<td>'+d.defect_date+'</td><td>'+d.issue_date+'</td><td>'+d.prepared_by+'</td>'+
+      '<td>'+d.due_date+'</td><td>'+d.close_date+'</td><td>'+d.close_recipient+'</td><td>'+statusBadge+'</td></tr>';
+  });
+  show('nv-tbody').innerHTML = h || '<tr><td colspan="13" style="text-align:center;color:var(--text3);padding:40px">無符合條件的資料</td></tr>';
+}
+
+// [Fix 2] saveNcrCell：newVal → value
+function saveNcrCell(el) {
+  if (!authUser) { el.blur(); requireAuth(function(){}); return; }
+  const sr    = parseInt(el.dataset.row);
+  const col   = parseInt(el.dataset.col);
+  const val   = el.textContent.trim();
+  const sheet = el.dataset.sheet;
+  if (!sr || isNaN(col)) return;
+  el.classList.add('saving');
+  gasPost('updateNcrImproveCell',
+    { sheetName: sheet, rowNum: sr, colNum: col + 1, value: val },  // ← [Fix 2] newVal → value
+    function(r) {
+      el.classList.remove('saving'); el.classList.add('saved');
+      setTimeout(function(){el.classList.remove('saved');}, 2000);
+      showToast('✅ 已更新', '#dcfce7', '#166534');
+    },
+    function(e) {
+      el.classList.remove('saving'); el.classList.add('error-cell');
+      setTimeout(function(){el.classList.remove('error-cell');}, 2000);
+      showToast('❌ 更新失敗：' + e.message, '#fee2e2', '#991b1b');
+    }
+  );
+}
+
+function exportNmdcView() {
+  if (!authUser) { requireAuth(function(){}); return; }
+  let csv = '分類,違規廠商,改善單編號,違規地點,違規敘述,缺失日期,開單日期,到期日,結案日期,狀態\n';
+  nvFiltered.forEach(function(d) { csv+='"'+[d.sheet,d.contractor,d.ncr_number,d.location,(d.description||'').replace(/"/g,'""'),d.defect_date,d.issue_date,d.due_date,d.close_date,d.status].join('","')+'"\n'; });
+  csvDown(csv, 'nmdc_ncr_'+today()+'.csv');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SOC View
+// ═══════════════════════════════════════════════════════════════════
+function initSocView() { if (!authUser) return; svPage = 1; renderSocView(); }
+
+function renderSocView() {
+  const start = show('sv-start').value, end = show('sv-end').value;
+  const type = show('sv-type').value, sub = show('sv-sub').value, loc = show('sv-loc').value;
+  const haz = show('sv-haz').value, sol = (show('sv-solved-fil')||{}).value||'', kw = (show('sv-search').value||'').toLowerCase();
+  const base = allData.filter(function(d){return d.source==='SOC';});
+  svFiltered = base.filter(function(d) {
+    if (start && d.date < start) return false; if (end && d.date > end) return false;
+    if (type && d.defCat !== type) return false; if (sub && d.sub !== sub) return false;
+    if (loc  && d.loc !== loc) return false;    if (haz && d.cat !== haz) return false;
+    if (sol === '1' && !d.solved) return false; if (sol === '0' && d.solved) return false;
+    if (kw && !(d.desc||'').toLowerCase().includes(kw) && !(d.name||'').toLowerCase().includes(kw) && !(d.sub||'').toLowerCase().includes(kw)) return false;
+    return true;
+  });
+  sv('sv-total',svFiltered.length); sv('sv-action',svFiltered.filter(function(d){return d.defCat==='Action';}).length);
+  sv('sv-cond',svFiltered.filter(function(d){return d.defCat==='Condition';}).length); sv('sv-good',svFiltered.filter(function(d){return d.defCat==='Positive';}).length);
+  sv('sv-lsr',svFiltered.filter(function(d){return d.lsr;}).length); sv('sv-solved',svFiltered.filter(function(d){return d.solved;}).length);
+  const countEl = show('sv-count'); if (countEl) countEl.textContent = '共 '+svFiltered.length+' 筆';
+  const totalPages = Math.ceil(svFiltered.length/PAGE)||1; if (svPage>totalPages) svPage=1;
+  renderSvPage();
+  renderPager('sv-pager', svPage, totalPages, function(p){svPage=p;renderSvPage();});
+}
+
+function renderSvPage() {
+  const page = svFiltered.slice((svPage-1)*PAGE, svPage*PAGE);
+  let h = '';
+  page.forEach(function(d, i) {
+    const idx = (svPage-1)*PAGE+i+1;
+    const typeColors = { Condition:'background:#fef3c7;color:#92400e', Action:'background:#fee2e2;color:#991b1b', Positive:'background:#dcfce7;color:#166534' };
+    const typeBg    = typeColors[d.defCat] || 'background:#f1f5f9;color:#475569';
+    const typeLabel = { Condition:'🔧 不安全條件', Action:'👷 不安全行為', Positive:'⭐ 優點' }[d.defCat] || d.defCat || '—';
+    const lsrBadge    = d.lsr    ? '<span style="padding:2px 7px;border-radius:4px;background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700">⚠ YES</span>' : '<span style="color:var(--text3);font-size:11px">—</span>';
+    const solvedBadge = d.solved ? '<span class="sb-closed">✓ 是</span>' : '<span class="sb-open">● 否</span>';
+    const rowId = d.rowId;
+    function editSoc(content, field) {
+      return rowId ? '<span class="editable" data-rowid="'+rowId+'" data-field="'+field+'" contenteditable="true" onblur="saveSocCell(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="outline:none">'+content+'</span>' : content;
+    }
+    h += '<tr><td style="text-align:center;color:var(--text3)">'+idx+'</td><td>'+d.date+'</td><td>'+d.name+'</td><td>'+d.company+'</td>'+
+      '<td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;'+typeBg+'">'+typeLabel+'</span></td>'+
+      '<td><strong style="color:var(--navy-600)">'+d.sub+'</strong></td><td>'+d.loc+'</td>'+
+      '<td><span style="font-size:11px">'+d.cat+'</span></td>'+
+      '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+d.desc+'">'+editSoc(d.desc,'description')+'</td>'+
+      '<td>'+editSoc(d.correctMeasure,'correct_measure')+'</td>'+
+      '<td>'+editSoc(d.responsiblePerson,'responsible_person')+'</td>'+
+      '<td>'+editSoc(d.improvedDate,'improved_date')+'</td>'+
+      '<td>'+lsrBadge+'</td><td>'+solvedBadge+'</td></tr>';
+  });
+  show('sv-tbody').innerHTML = h || '<tr><td colspan="14" style="text-align:center;color:var(--text3);padding:40px">無符合條件的資料</td></tr>';
+}
+
+// [Fix 4] saveSocCell 改用 gasPost
+function saveSocCell(el) {
+  if (!authUser) { el.blur(); requireAuth(function(){}); return; }
+  const rowId = parseInt(el.dataset.rowid);
+  const field = el.dataset.field;
+  const val   = el.textContent.trim();
+  if (!rowId || !field) return;
+  el.classList.add('saving');
+  gasPost('updateSmartsheetCell',
+    { rowId: rowId, fieldKey: field, value: val },
+    function(r) {
+      el.classList.remove('saving'); el.classList.add('saved');
+      setTimeout(function(){el.classList.remove('saved');}, 2000);
+      showToast('✅ 已更新 SOC', '#dcfce7', '#166534');
+    },
+    function(e) {
+      el.classList.remove('saving'); el.classList.add('error-cell');
+      setTimeout(function(){el.classList.remove('error-cell');}, 2000);
+      showToast('❌ 更新失敗：' + e.message, '#fee2e2', '#991b1b');
+    }
+  );
+}
+
+function exportSocView() {
+  if (!authUser) { requireAuth(function(){}); return; }
+  let csv = '填寫日期,觀察者,公司,觀察種類,承攬商,地點,危害種類,描述,改善措施,改善人員,改善日期,LSR,已改善\n';
+  svFiltered.forEach(function(d) { csv+='"'+[d.date,d.name,d.company,d.defCat,d.sub,d.loc,d.cat,(d.desc||'').replace(/"/g,'""'),d.correctMeasure,d.responsiblePerson,d.improvedDate,d.lsr?'是':'否',d.solved?'是':'否'].join('","')+'"\n'; });
+  csvDown(csv, 'soc_'+today()+'.csv');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  NCR Add
+// ═══════════════════════════════════════════════════════════════════
+let naRecent = [];
+function initNcrAdd() { if (!authUser) return; show('na-date').value = today(); }
+
+// [Fix 5] submitNcrAdd 改用 gasPost
+function submitNcrAdd() {
+  if (!authUser) { requireAuth(function(){}); return; }
+  const date = show('na-date').value, cont = show('na-cont').value.trim(), desc = (show('na-content').value||'').trim();
+  if (!date) { showNcrAlert('請填寫開單日期','#fee2e2','#991b1b'); return; }
+  if (!cont) { showNcrAlert('請填寫承攬商名稱','#fee2e2','#991b1b'); return; }
+  if (!desc) { showNcrAlert('請填寫缺失內容','#fee2e2','#991b1b'); return; }
+  const btn = show('naSubmitBtn'); btn.disabled = true; btn.textContent = '⏳ 送出中…';
+  const rowData = [date, show('na-unit').value, show('na-dept').value, show('na-insptype').value, cont, show('na-cat').value, show('na-area').value, desc, show('na-type').value, show('na-fine').value||'', show('na-closed').value, show('na-closedate').value, show('na-regno').value];
+  gasPost('addTpcNcrRow',
+    { rowData: rowData },
+    function(r) {
+      btn.disabled = false; btn.textContent = '✓ 送出新增';
+      showNcrAlert('✅ 已成功新增 TPC NCR 缺失單！', '#dcfce7', '#166534');
+      naRecent.unshift({ date, cont, desc }); renderNaList(); resetNcrAdd();
+    },
+    function(e) {
+      btn.disabled = false; btn.textContent = '✓ 送出新增';
+      showNcrAlert('❌ 失敗：' + (e.message||'未知'), '#fee2e2', '#991b1b');
+    }
+  );
+}
+
+function resetNcrAdd() {
+  ['na-unit','na-dept','na-insptype','na-cont','na-cat','na-area','na-content','na-type','na-fine','na-closedate','na-regno'].forEach(function(id) { const el=show(id); if(el)el.value=''; });
+  show('na-date').value = today(); show('na-closed').value = '否';
+}
+function renderNaList() {
+  if (!naRecent.length) { show('naRecentList').innerHTML='<div style="text-align:center;color:var(--text3);padding:24px 0">尚無新增記錄</div>'; return; }
+  show('naRecentList').innerHTML = naRecent.map(function(r) { return '<div style="padding:8px 10px;border-radius:var(--r-sm);background:var(--bg);border-left:3px solid var(--green);margin-bottom:6px;font-size:11px"><div style="font-weight:700;color:var(--navy-700)">'+r.cont+' — '+r.date+'</div><div style="color:var(--text2);margin-top:2px;line-height:1.4">'+r.desc.substring(0,80)+(r.desc.length>80?'…':'')+'</div></div>'; }).join('');
+}
+function showNcrAlert(msg, bg, col) {
+  const el = show('ncrAlert'); if (!el) return;
+  el.style.display='block'; el.style.background=bg; el.style.color=col; el.textContent=msg;
+  setTimeout(function(){el.style.display='none';}, 5000);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Manpower Add Modal
+// ═══════════════════════════════════════════════════════════════════
+let mpProtect = true, mpEntriesState = [];
+function showMpAddRow() {
+  if (!authUser) { requireAuth(function(){showMpAddRow();}); return; }
+  show('mpAddModal').style.display = 'flex';
+  show('mp-add-date').value = today();
+  show('mp-entries-wrap').style.display = 'none';
+  show('mp-date-hint').textContent = '';
+  show('mpClearBtn').style.display = 'none';
+  show('mpAddAlert').style.display = 'none';
+  document.body.style.overflow = 'hidden';
+}
+function hideMpAddRow() { show('mpAddModal').style.display='none'; document.body.style.overflow=''; }
+function mpSetToday() { show('mp-add-date').value = today(); mpLoadDayEntries(); }
+function toggleProtect() {
+  mpProtect = !mpProtect;
+  show('protectToggle').style.background = mpProtect ? 'var(--cyan)' : '#94a3b8';
+  show('protectKnob').style.left = mpProtect ? '20px' : '2px';
+}
+function mpLoadDayEntries() {
+  const d = show('mp-add-date').value; if (!d) return;
+  show('mp-entries-wrap').style.display = 'block';
+  show('mpClearBtn').style.display = 'inline-block';
+  const companies = mpRaw.rows ? mpRaw.rows.map(function(r){return r.company;}) : [];
+  const existing  = {};
+  mpRaw.rows && mpRaw.rows.forEach(function(r) { if (r.daily && r.daily[d]) existing[r.company]=r.daily[d]; });
+  mpEntriesState = companies.map(function(co) { return { company:co, current:existing[co]||0, new:existing[co]||0 }; });
+  const hint = show('mp-date-hint'), hasData = Object.keys(existing).length > 0;
+  hint.textContent = hasData ? '📋 此日期已有 '+Object.keys(existing).length+' 筆資料' : '📋 此日期尚無資料';
+  hint.style.color = hasData ? '#d97706' : '#059669';
+  renderMpEntries();
+}
+function renderMpEntries() {
+  let h = '';
+  mpEntriesState.forEach(function(e, i) {
+    const changed = e.new !== e.current;
+    h += '<tr style="'+(changed?'background:#fefce8':'')+'"><td style="padding:8px 12px;font-weight:'+(changed?700:400)+';color:'+(changed?'var(--navy-700)':'var(--text2)')+'">'+e.company+'</td><td style="padding:4px 8px;text-align:center"><input type="number" value="'+e.new+'" min="0" data-i="'+i+'" onchange="mpEntriesState['+i+'].new=parseInt(this.value)||0;this.closest(\'tr\').style.background=mpEntriesState['+i+'].new!==mpEntriesState['+i+'].current?\'#fefce8\':\'\';" style="width:80px;text-align:center;padding:5px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:\'DM Mono\',monospace;font-size:13px;outline:none"></td><td style="padding:8px 12px;text-align:center;color:var(--text3);font-family:\'DM Mono\',monospace">'+e.current+'</td></tr>';
+  });
+  show('mp-entries-tbody').innerHTML = h;
+}
+function mpAddNewCompany() {
+  const co = (show('mp-new-co').value||'').trim(), cnt = parseInt(show('mp-new-co-count').value)||0;
+  if (!co) return;
+  if (mpEntriesState.find(function(e){return e.company===co;})) {
+    show('mpAddAlert').style.display='block'; show('mpAddAlert').textContent='此承攬商已存在'; show('mpAddAlert').style.background='#fef3c7'; show('mpAddAlert').style.color='#92400e';
+    setTimeout(function(){show('mpAddAlert').style.display='none';}, 2000); return;
+  }
+  mpEntriesState.push({ company:co, current:0, new:cnt });
+  show('mp-new-co').value=''; show('mp-new-co-count').value='';
+  renderMpEntries();
+}
+function mpClearAll() { if (!confirm('確定清除此日期所有出工資料？')) return; mpEntriesState.forEach(function(e){e.new=0;}); renderMpEntries(); }
+
+// [Fix 6] submitMpAddRow 改用 gasPost
+function submitMpAddRow() {
+  if (!authUser) { requireAuth(function(){}); return; }
+  const d = show('mp-add-date').value;
+  if (!d) { show('mpAddAlert').style.display='block'; show('mpAddAlert').textContent='請選擇日期'; return; }
+  const entries = mpEntriesState.filter(function(e) { return !mpProtect || e.new !== e.current; }).map(function(e) { return { company:e.company, count:e.new }; });
+  if (!entries.length) {
+    show('mpAddAlert').style.display='block'; show('mpAddAlert').style.background='#fef3c7'; show('mpAddAlert').style.color='#92400e';
+    show('mpAddAlert').textContent = '無需更新的資料'; return;
+  }
+  const btn = show('mpAddBtn'); btn.disabled = true; btn.textContent = '⏳ 儲存中…';
+  gasPost('upsertManpowerDay',
+    { dateStr: d, entries: entries, onlyChanged: mpProtect },
+    function(r) {
+      btn.disabled = false; btn.textContent = '✓ 儲存';
+      show('mpAddAlert').style.display='block';
+      show('mpAddAlert').style.background='#dcfce7'; show('mpAddAlert').style.color='#166534';
+      show('mpAddAlert').textContent = '✅ 已成功儲存 '+entries.length+' 筆記錄！';
+      setTimeout(function(){ hideMpAddRow(); }, 1800);
+      renderMpGrid();
+    },
+    function(e) {
+      btn.disabled = false; btn.textContent = '✓ 儲存';
+      show('mpAddAlert').style.display='block'; show('mpAddAlert').style.background='#fee2e2'; show('mpAddAlert').style.color='#991b1b';
+      show('mpAddAlert').textContent = '❌ 連線錯誤：' + (e.message||'請重試');
+    }
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Chart 繪圖函式
+// ═══════════════════════════════════════════════════════════════════
+function drawDoughnut(containerId, labels, data, colors) {
+  const el = show(containerId); if (!el) return;
+  if (ecInst[containerId]) { ecInst[containerId].dispose(); ecInst[containerId]=null; }
+  el.style.width='100%';
+  const chart = echarts.init(el); ecInst[containerId] = chart;
+  const palette = colors || PAL;
+  chart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ trigger:'item', formatter:'{b}: {c} ({d}%)' },
+    legend:{ orient:'horizontal', left:'center', bottom:'0', textStyle:{ fontSize:11, color:'#64748b' }, icon:'circle', itemWidth:10, itemHeight:10 },
+    series:[{ type:'pie', radius:['42%','68%'], center:['50%','42%'],
+      data:labels.map(function(l,i){return{name:l,value:data[i],itemStyle:{color:palette[i%palette.length]}};}),
+      label:{ show:true, formatter:function(p){return p.value>0?p.value:'';}, fontSize:11, fontWeight:'bold', color:'white', position:'inside' },
+      labelLine:{ show:false },
+      emphasis:{ itemStyle:{ shadowBlur:10, shadowOffsetX:0, shadowColor:'rgba(0,0,0,.3)' } }
+    }]
+  });
+  window.addEventListener('resize', function(){chart.resize();});
+}
+
+function drawStackedBar(canvasId, labels, datasets) {
+  destroyChart(canvasId); const ctx = show(canvasId); if (!ctx) return;
+  ch[canvasId] = new Chart(ctx, { type:'bar', data:{ labels, datasets:datasets.map(function(d){return{label:d.label,data:d.data,backgroundColor:d.color,borderRadius:4,borderSkipped:false};}) }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ boxWidth:12, font:{size:11} } }, datalabels:{ display:false } }, scales:{ x:{ stacked:true, ticks:{ maxTicksLimit:12 } }, y:{ stacked:true, beginAtZero:true } } } });
+}
+
+function drawHBar(canvasId, labels, data, dslabel, colors) {
+  destroyChart(canvasId); const ctx = show(canvasId); if (!ctx) return;
+  ch[canvasId] = new Chart(ctx, { type:'bar', data:{ labels, datasets:[{ label:dslabel||'數量', data, backgroundColor:labels.map(function(_,i){return colors[i%colors.length]+'cc';}), borderRadius:4 }] }, options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }, datalabels:{ display:true, anchor:'end', align:'end', font:{ size:11, weight:'bold' }, color:function(ctx2){return colors[ctx2.dataIndex%colors.length];} } }, scales:{ x:{ beginAtZero:true }, y:{ ticks:{ font:{ size:11 } } } } } });
+}
+
+function drawLine(canvasId, labels, datasets) {
+  destroyChart(canvasId); const ctx = show(canvasId); if (!ctx) return;
+  ch[canvasId] = new Chart(ctx, { type:'line', data:{ labels, datasets }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ boxWidth:12, font:{size:10}, padding:8 } }, datalabels:{ display:false } }, scales:{ x:{ ticks:{ maxTicksLimit:12 } }, y:{ beginAtZero:true } }, interaction:{ mode:'index', intersect:false } } });
+}
+
+function destroyChart(id) {
+  if (ch[id]) { try { ch[id].destroy(); } catch(e) {} delete ch[id]; }
+  if (ecInst[id]) { try { ecInst[id].dispose(); } catch(e) {} delete ecInst[id]; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  匯出 / 工具
+// ═══════════════════════════════════════════════════════════════════
+function renderPager(id, current, total, cb) {
+  const el = show(id); if (!el) return;
+  if (total <= 1) { el.innerHTML=''; return; }
+  const mkBtn = function(p, label, disabled) {
+    return '<button '+(disabled?'disabled style="opacity:.4;cursor:default"':'')+
+      ' onclick="('+cb.toString()+')('+p+')" style="padding:4px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:'+(p===current?'var(--blue)':'var(--card)')+';color:'+(p===current?'white':'var(--text2)')+';font-size:11px;cursor:pointer;font-family:\'Sora\',sans-serif">'+label+'</button>';
+  };
+  let h = '<span style="color:var(--text3)">第 '+current+'/'+total+' 頁</span>';
+  h += mkBtn(1,'«',current===1) + mkBtn(current-1,'‹',current===1);
+  const s=Math.max(1,current-2), e=Math.min(total,current+2);
+  for (let p=s;p<=e;p++) h+=mkBtn(p,p,false);
+  h += mkBtn(current+1,'›',current===total) + mkBtn(total,'»',current===total);
+  el.innerHTML = h;
+}
+
+function csvDown(csv, filename) {
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM+csv], { type:'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob); link.download = filename; link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function exportCurrent() {
+  if (!authUser) { requireAuth(function(){}); return; }
+  const pane = document.querySelector('.tab-pane.active'); if (!pane) return;
+  const id = pane.id;
+  if (id==='tpcview-pane') exportTpcView();
+  else if (id==='nmdcview-pane') exportNmdcView();
+  else if (id==='socview-pane') exportSocView();
+  else if (id==='mpgrid-pane') exportMpGrid();
+  else {
+    let csv = '資料,數值\n';
+    document.querySelectorAll('#'+id+' .kpi-val').forEach(function(el, i) {
+      csv += (el.previousElementSibling ? el.previousElementSibling.textContent.replace(/\n/g,' ') : 'KPI_'+i) + ',' + el.textContent + '\n';
+    });
+    csvDown(csv, 'export_'+today()+'.csv');
+  }
+}
+
+function typeBadge(type) {
+  const map = {
+    '缺點': '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b">缺點</span>',
+    '罰單': '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#ede9fe;color:#5b21b6;font-family:\'DM Mono\',monospace">罰單</span>',
+    '優點': '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534">優點</span>'
+//  NMDC HSE KPI Dashboard v6.0 — Frontend Script (Fixed)
+//  修正清單：
+//    [Fix 1] saveTpcCell gasPost 參數 newVal → value
+//    [Fix 2] saveNcrCell gasPost 參數 newVal → value
+//    [Fix 3] saveMpCell 改用 gasPost（原 google.script.run）
+//    [Fix 4] saveSocCell 改用 gasPost（原 google.script.run）
+//    [Fix 5] submitNcrAdd 改用 gasPost（原 google.script.run）
+//    [Fix 6] submitMpAddRow 改用 gasPost（原 google.script.run）
+//    [Fix 7] processData 後登入狀態下更新 Header 計數
+// ═══════════════════════════════════════════════════════════════════
+
+if(typeof CanvasRenderingContext2D!=='undefined'&&!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){if(r===undefined)r=0;var rad=Array.isArray(r)?r[0]:r;this.beginPath();this.moveTo(x+rad,y);this.lineTo(x+w-rad,y);this.quadraticCurveTo(x+w,y,x+w,y+rad);this.lineTo(x+w,y+h-rad);this.quadraticCurveTo(x+w,y+h,x+w-rad,y+h);this.lineTo(x+rad,y+h);this.quadraticCurveTo(x,y+h,x,y+h-rad);this.lineTo(x,y+rad);this.quadraticCurveTo(x,y,x+rad,y);this.closePath();return this;};
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  GAS REST API 端點（部署後換成你的 exec URL）
+// ═══════════════════════════════════════════════════════════════════
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxMtUKIat_be8QDCALm0QCRlqYbsCHAylfcDXWgPS8f1turvtLtOOnIKhjL-9GDPiqf/exec';
 
 // GET 請求
 function gasGet(action, onOk, onErr) {
