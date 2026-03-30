@@ -1330,7 +1330,7 @@ function gasGet(action, onOk, onErr) {
 function gasPost(action, payload, onOk, onErr) {
   fetch(GAS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(Object.assign({ action: action }, payload))
   })
     .then(function(r) {
