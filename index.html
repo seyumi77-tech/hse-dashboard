@@ -340,6 +340,7 @@ td{
   color:var(--text1);vertical-align:middle;
 }
 tr:hover td{background:#f8faff;}
+td.desc-col{min-width:180px;word-break:break-word;line-height:1.5;white-space:normal;}
 .nc{text-align:center;}
 
 /* ── Badges ─────────────────────────────────────────────────── */
@@ -1162,11 +1163,11 @@ tr:hover td{background:#f8faff;}
 <button onclick="exportTpcView()" style="padding:4px 12px;border:1px solid rgba(255,255,255,.35);border-radius:6px;background:rgba(255,255,255,.12);color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif">📥 匯出</button>
 </div></div>
 <div style="overflow-x:auto;max-height:62vh">
-<table style="min-width:1050px">
+<table style="min-width:1400px">
 <thead><tr>
 <th style="width:36px">#</th><th style="width:90px">開單日期</th><th style="width:65px">主辦組</th>
 <th style="width:80px">巡檢類型</th><th style="width:80px">管登編號</th><th style="width:140px">承攬商</th>
-<th style="width:100px">開立總類</th><th style="width:90px">區域</th><th>缺失內容</th>
+<th style="width:100px">開立總類</th><th style="width:90px">區域</th><th style="min-width:200px">缺失內容</th>
 <th style="width:90px">缺失種類</th><th style="width:75px">罰款</th><th style="width:72px">狀態</th><th style="width:90px">結案日期</th>
 </tr></thead>
 <tbody id="tv-tbody"><tr><td colspan="13" style="text-align:center;color:var(--text3);padding:40px">資料載入後顯示</td></tr></tbody>
@@ -1203,10 +1204,10 @@ tr:hover td{background:#f8faff;}
 <button onclick="exportNmdcView()" style="padding:4px 12px;border:1px solid rgba(255,255,255,.35);border-radius:6px;background:rgba(255,255,255,.12);color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif">📥 匯出</button>
 </div></div>
 <div style="overflow-x:auto;max-height:62vh">
-<table style="min-width:1000px">
+<table style="min-width:1400px">
 <thead><tr>
 <th style="width:36px">#</th><th style="width:62px">分類</th><th style="width:140px">違規廠商</th>
-<th style="width:150px">改善單編號</th><th style="width:100px">違規地點</th><th>違規敘述</th>
+<th style="width:150px">改善單編號</th><th style="width:100px">違規地點</th><th style="min-width:200px">違規敘述</th>
 <th style="width:86px">缺失日期</th><th style="width:86px">開單日期</th><th style="width:62px">準備者</th>
 <th style="width:86px">到期日</th><th style="width:86px">結案日期</th><th style="width:90px">結案收件者</th><th style="width:78px">狀態</th>
 </tr></thead>
@@ -1252,11 +1253,11 @@ tr:hover td{background:#f8faff;}
 <button onclick="exportSocView()" style="padding:4px 12px;border:1px solid rgba(255,255,255,.35);border-radius:6px;background:rgba(255,255,255,.12);color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif">📥 匯出</button>
 </div></div>
 <div style="overflow-x:auto;max-height:62vh">
-<table style="min-width:1150px">
+<table style="min-width:1500px">
 <thead><tr>
 <th style="width:36px">#</th><th style="width:90px">填寫日期</th><th style="width:80px">觀察者</th><th style="width:65px">公司</th>
 <th style="width:105px">觀察種類</th><th style="width:150px">承攬商</th><th style="width:105px">地點</th>
-<th style="width:120px">危害種類</th><th>描述</th><th style="width:75px">改善措施</th>
+<th style="width:120px">危害種類</th><th style="min-width:180px">描述</th><th style="min-width:150px">改善措施</th>
 <th style="width:75px">改善人員</th><th style="width:88px">改善日期</th><th style="width:50px">LSR</th><th style="width:62px">已改善</th>
 </tr></thead>
 <tbody id="sv-tbody"><tr><td colspan="14" style="text-align:center;color:var(--text3);padding:40px">資料載入後顯示</td></tr></tbody>
