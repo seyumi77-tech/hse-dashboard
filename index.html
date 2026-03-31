@@ -822,6 +822,7 @@ td.desc-col{min-width:180px;word-break:break-word;line-height:1.5;white-space:no
     <div class="hdr-btns">
       <button class="hbtn" onclick="loadData()">🔄 重新整理</button>
       <button class="hbtn pri" onclick="exportCurrent()">📥 匯出</button>
+      <button class="btn sec" onclick="exportAllCharts()" title="Export All Charts">📊 匯出圖表</button>
     </div>
   </div>
 </div>
@@ -1450,14 +1451,92 @@ function updateSplash(pct, msg) {
 }
 
 // ═══════════ CHART EXPORT UTILITY ═══════════
-function exportChartToPng(canvasId, filename) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return showToast('找不到圖表 Chart not found', 'error');
-  const link = document.createElement('a');
-  link.download = (filename || canvasId) + '_' + new Date().toISOString().slice(0,10) + '.png';
-  link.href = canvas.toDataURL('image/png', 1.0);
-  link.click();
-  showToast('圖表已匯出 Chart exported!', 'success');
+function exportChartToPng(canvasId,filename){
+  var canvas=document.getElementById(canvasId);
+  if(!canvas){showToast("Chart not found","error");return;}
+  var tmpC=document.createElement("canvas");
+  tmpC.width=canvas.width*2;tmpC.height=canvas.height*2;
+  var tmpCtx=tmpC.getContext("2d");
+  tmpCtx.scale(2,2);tmpCtx.fillStyle="#ffffff";
+  tmpCtx.fillRect(0,0,canvas.width,canvas.height);
+  tmpCtx.drawImage(canvas,0,0);
+  var link=document.createElement("a");
+  link.download=(filename||canvasId)+"_"+new Date().toISOString().slice(0,10)+".png";
+  link.href=tmpC.toDataURL("image/png",1.0);
+  link.click();showToast("Chart exported!","success");
+}
+function exportEChartToPng(containerId,filename){
+  var el=document.getElementById(containerId);
+  if(!el||!el._ecInst){showToast("EChart not found","error");return;}
+  var url=el._ecInst.getDataURL({type:"png",pixelRatio:2,backgroundColor:"#fff"});
+  var link=document.createElement("a");
+  link.download=(filename||containerId)+"_"+new Date().toISOString().slice(0,10)+".png";
+  link.href=url;link.click();showToast("Chart exported!","success");
+}
+function exportAllCharts(){
+  var title="NMDC HSE KPI Dashboard - Charts Report";
+  var date=new Date().toLocaleDateString("zh-TW");
+  var charts=[
+    {t:"canvas",id:"gauge-closure",n:"NCR \u7d50\u6848\u7387 Closure Rate"},
+    {t:"canvas",id:"gauge-ptw",n:"PTW \u5408\u683c\u7387"},
+    {t:"canvas",id:"gauge-tbm",n:"TBM \u57f7\u884c\u7387"},
+    {t:"echart",id:"chart-cat",n:"SOC \u7f3a\u5931\u985e\u5225\u5206\u4f48"},
+    {t:"echart",id:"chart-dtype",n:"\u7f3a\u5931\u578b\u614b\u5206\u4f48"},
+    {t:"canvas",id:"chart-monthly",n:"\u6708\u5225\u7d71\u8a08 Monthly",w:1},
+    {t:"canvas",id:"chart-cattend",n:"\u627f\u652c\u5546\u8da8\u52e2 Trend",w:1},
+    {t:"echart",id:"ni-chart-cat",n:"NMDC NCR \u985e\u5225"},
+    {t:"echart",id:"ni-chart-status",n:"NMDC NCR \u72c0\u614b"},
+    {t:"canvas",id:"ni-chart-cont",n:"NMDC NCR \u627f\u652c\u5546",w:1},
+    {t:"canvas",id:"ni-chart-monthly",n:"NMDC NCR \u6708\u5225",w:1},
+    {t:"canvas",id:"mp-trend",n:"\u4eba\u529b\u8da8\u52e2 Trend",w:1},
+    {t:"canvas",id:"mp-comp-chart",n:"\u4eba\u529b\u5206\u4f48 Composition"},
+    {t:"canvas",id:"mp-monthly",n:"\u6708\u5225\u4eba\u529b",w:1}
+  ];
+  var imgs=[];
+  charts.forEach(function(c){
+    var el=document.getElementById(c.id);if(!el)return;
+    var url="";
+    if(c.t==="canvas"){
+      var tc=document.createElement("canvas");
+      tc.width=el.width*2;tc.height=el.height*2;
+      var tx=tc.getContext("2d");tx.scale(2,2);
+      tx.fillStyle="#fff";tx.fillRect(0,0,el.width,el.height);
+      tx.drawImage(el,0,0);url=tc.toDataURL("image/png",1.0);
+    }else if(el._ecInst){
+      url=el._ecInst.getDataURL({type:"png",pixelRatio:2,backgroundColor:"#fff"});
+    }
+    if(url)imgs.push({n:c.n,url:url,w:c.w||0});
+  });
+  if(imgs.length===0){showToast("\u7121\u53ef\u532f\u51fa\u7684\u5716\u8868","error");return;}
+  var w=window.open("","_blank");
+  if(!w){showToast("\u8acb\u5141\u8a31\u5f48\u51fa\u8996\u7a97","error");return;}
+  var h="<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>"+title+"</title>";
+  h+="<style>";
+  h+="*{margin:0;padding:0;box-sizing:border-box}";
+  h+="body{font-family:system-ui,-apple-system,sans-serif;background:#f0f4f8;color:#1e293b;padding:40px}";
+  h+=".hdr{text-align:center;margin-bottom:40px;padding:30px;background:linear-gradient(135deg,#0f172a,#1e3a5f);border-radius:16px;color:#fff}";
+  h+=".hdr h1{font-size:22px;margin-bottom:6px}.hdr p{opacity:.7;font-size:13px}";
+  h+=".grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;max-width:1200px;margin:0 auto}";
+  h+=".card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);break-inside:avoid}";
+  h+=".card h3{font-size:14px;color:#475569;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}";
+  h+=".card img{width:100%;height:auto;border-radius:6px}";
+  h+=".fw{grid-column:1/-1}";
+  h+=".ft{text-align:center;margin-top:40px;padding:16px;color:#94a3b8;font-size:11px}";
+  h+=".no-print{margin:20px auto;text-align:center}";
+  h+=".pbtn{background:#0d9488;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;cursor:pointer}";
+  h+=".pbtn:hover{background:#0f766e}";
+  h+="@media print{.no-print{display:none}body{padding:20px;background:#fff}.card{box-shadow:none;border:1px solid #e2e8f0}}";
+  h+="</style></head><body>";
+  h+="<div class=\"hdr\"><h1>\ud83d\udcca "+title+"</h1><p>"+date+" | NMDC HSE KPI Dashboard v6.0</p></div>";
+  h+="<div class=\"no-print\"><button class=\"pbtn\" onclick=\"window.print()\">\ud83d\udda8\ufe0f \u5217\u5370 / Print</button></div>";
+  h+="<div class=\"grid\">";
+  imgs.forEach(function(img){
+    h+="<div class=\"card"+(img.w?" fw":"")+"\"><h3>"+img.n+"</h3><img src=\""+img.url+"\"/></div>";
+  });
+  h+="</div><div class=\"ft\">NMDC HSE KPI Dashboard v6.0 | "+new Date().toLocaleString("zh-TW")+"</div>";
+  h+="</body></html>";
+  w.document.write(h);w.document.close();
+  showToast("\u5716\u8868\u5831\u544a\u5df2\u7522\u751f\uff01","success");
 }
 
 // ═══════════ TABLE EXPORT TO CSV UTILITY ═══════════  
@@ -1935,7 +2014,7 @@ function renderManpower(){if(!authUser)return;
   const byCo={};fil.forEach(d=>{if(!byCo[d.co])byCo[d.co]=0;byCo[d.co]+=d.n;});
   const coK=Object.keys(byCo).sort((a,b)=>byCo[b]-byCo[a]);
   const ccCtx=show('mp-comp-chart');if(!ccCtx)return;
-  ch['mp-comp-chart']=new Chart(ccCtx,{type:'doughnut',data:{labels:coK,datasets:[{data:coK.map(k=>byCo[k]),backgroundColor:PAL}]},options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{display:false},legend:{position:'bottom',labels:{boxWidth:12,font:{size:11},padding:15}}}}});
+  ch['mp-comp-chart']=new Chart(ccCtx,{type:'doughnut',data:{labels:coK,datasets:[{data:coK.map(k=>byCo[k]),backgroundColor:PAL}]},options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{display:true,color:'#fff',font:{weight:'bold',size:12},formatter:function(v,ctx){var sum=ctx.dataset.data.reduce(function(a,b){return a+b},0);return sum>0?(v/sum*100).toFixed(0)+'%':'';}},legend:{position:'bottom',labels:{boxWidth:12,font:{size:11},padding:15}}}}});
   const byCom={};fil.forEach(d=>{const m=d.date.substring(0,7);if(!byCom[m])byCom[m]={};byCom[m][d.co]=(byCom[m][d.co]||0)+d.n;});
   const mos=Object.keys(byCom).sort();const allCos=[...new Set(fil.map(d=>d.co))].sort();
   const mmCtx=show('mp-monthly');if(!mmCtx)return;
@@ -2208,9 +2287,9 @@ function drawDoughnut(containerId,labels,data,colors){
   const el=show(containerId);if(!el)return;
   if(ecInst[containerId]){ecInst[containerId].dispose();ecInst[containerId]=null;}
   el.style.width='100%';
-  const chart=echarts.init(el);ecInst[containerId]=chart;
+  const chart=echarts.init(el);el._ecInst=chart;ecInst[containerId]=chart;
   const palette=colors||PAL;
-  chart.setOption({backgroundColor:'transparent',tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{orient:'horizontal',left:'center',bottom:'0',textStyle:{fontSize:11,color:'#64748b'},icon:'circle',itemWidth:10,itemHeight:10},series:[{type:'pie',radius:['42%','68%'],center:['50%','42%'],data:labels.map((l,i)=>({name:l,value:data[i],itemStyle:{color:palette[i%palette.length]}})),label:{show:true,formatter:function(p){return p.value>0?p.value:'';},fontSize:11,fontWeight:'bold',color:'white',position:'inside'},labelLine:{show:false},emphasis:{itemStyle:{shadowBlur:10,shadowOffsetX:0,shadowColor:'rgba(0,0,0,.3)'}}}]});
+  chart.setOption({backgroundColor:'transparent',tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{orient:'horizontal',left:'center',bottom:'0',textStyle:{fontSize:11,color:'#64748b'},icon:'circle',itemWidth:10,itemHeight:10},series:[{type:'pie',radius:['42%','68%'],center:['50%','42%'],data:labels.map((l,i)=>({name:l,value:data[i],itemStyle:{color:palette[i%palette.length]}})),label:{show:true,formatter:function(p){return p.percent>0?p.percent.toFixed(0)+'%':'';},fontSize:11,fontWeight:'bold',color:'white',position:'inside'},labelLine:{show:false},emphasis:{itemStyle:{shadowBlur:10,shadowOffsetX:0,shadowColor:'rgba(0,0,0,.3)'}}}]});
   window.addEventListener('resize',()=>chart.resize());
 }
 function drawStackedBar(canvasId,labels,datasets){
