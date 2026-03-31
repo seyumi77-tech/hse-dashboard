@@ -2289,7 +2289,7 @@ function drawDoughnut(containerId,labels,data,colors){
   el.style.width='100%';
   const chart=echarts.init(el);el._ecInst=chart;ecInst[containerId]=chart;
   const palette=colors||PAL;
-  chart.setOption({backgroundColor:'transparent',tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{orient:'horizontal',left:'center',bottom:'0',textStyle:{fontSize:11,color:'#64748b'},icon:'circle',itemWidth:10,itemHeight:10},series:[{type:'pie',radius:['42%','68%'],center:['50%','42%'],data:labels.map((l,i)=>({name:l,value:data[i],itemStyle:{color:palette[i%palette.length]}})),label:{show:true,formatter:function(p){return p.percent>0?p.percent.toFixed(0)+'%':'';},fontSize:10,fontWeight:'bold',color:'#334155',position:'outside',distanceToLabelLine:5},labelLine:{show:true,length:12,length2:8,lineStyle:{color:'#94a3b8'}},emphasis:{itemStyle:{shadowBlur:10,shadowOffsetX:0,shadowColor:'rgba(0,0,0,.3)'}}}]});
+  chart.setOption({backgroundColor:'transparent',tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{orient:'horizontal',left:'center',bottom:'0',textStyle:{fontSize:11,color:'#64748b'},icon:'circle',itemWidth:10,itemHeight:10},series:[{type:'pie',radius:['42%','68%'],center:['50%','42%'],data:labels.map((l,i)=>({name:l,value:data[i],itemStyle:{color:palette[i%palette.length]}})),label:{show:true,formatter:function(p){return p.percent>0?p.percent.toFixed(0)+'%':'';},fontSize:11,fontWeight:'bold',color:'#fff',position:'inside'},labelLine:{show:false},emphasis:{itemStyle:{shadowBlur:10,shadowOffsetX:0,shadowColor:'rgba(0,0,0,.3)'}}}]});
   window.addEventListener('resize',()=>chart.resize());
 }
 function drawStackedBar(canvasId,labels,datasets){
